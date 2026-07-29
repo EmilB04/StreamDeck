@@ -1,0 +1,13 @@
+node_modules/
+com.emilberglund.batterymonitor.sdPlugin/bin/
+com.emilberglund.batterymonitor.sdPlugin/node_modules/
+com.emilberglund.batterymonitor.sdPlugin/logs/
+*.streamDeckPlugin
+.DS_Store
+
+# Written by `npm run sync-deps` (npm --prefix), not part of the source.
+com.emilberglund.batterymonitor.sdPlugin/package-lock.json
+
+# Personal tool config; contains absolute paths from whoever ran it.
+.claude/settings.local.json
+com.emilberglund.batterymonitor.sdPlugin/.claude/

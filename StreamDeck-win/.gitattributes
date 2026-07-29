@@ -1,0 +1,6 @@
+# The working copy lives on an NTFS mount edited from both Windows and WSL;
+# normalise to LF in the repo so line endings don't churn between commits.
+* text=auto eol=lf
+
+# Windows-only tooling that is more likely to be run by double-clicking.
+*.ps1 text eol=crlf

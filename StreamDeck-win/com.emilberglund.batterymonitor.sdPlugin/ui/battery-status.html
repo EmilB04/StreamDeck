@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8" />
+	<title>Device Battery</title>
+	<script src="https://sdpi-components.dev/releases/v3/sdpi-components.js"></script>
+	<style>
+		.group-heading {
+			margin: 14px 0 4px 0;
+			padding-top: 10px;
+			border-top: 1px solid rgba(255, 255, 255, 0.12);
+			font-size: 10px;
+			text-transform: uppercase;
+			letter-spacing: 0.08em;
+			opacity: 0.55;
+			text-align: right;
+			padding-right: 8px;
+			width: 94px;
+		}
+		.hint {
+			opacity: 0.7;
+			font-size: 11px;
+			line-height: 1.4;
+		}
+	</style>
+</head>
+<body>
+	<!--
+		The device list is not hard-coded: the "getDevices" datasource asks the
+		plugin to scan the machine, and the plugin answers with whatever its
+		providers actually found (see src/providers/discovery.ts).
+
+		show-refresh gives the built-in refresh button (re-requests the datasource
+		with isRefresh: true); hot-reload makes the component keep listening for
+		sendToPropertyInspector messages, which is what lets "Rescan devices" push
+		a new list.
+	-->
+	<sdpi-item label="Device">
+		<sdpi-select
+			setting="deviceKey"
+			datasource="getDevices"
+			show-refresh
+			hot-reload
+			placeholder="Scanning for devices…"
+			loading="Scanning for devices…"
+		></sdpi-select>
+	</sdpi-item>
+
+	<sdpi-item label="Refresh every">
+		<sdpi-range setting="refreshSeconds" min="15" max="300" step="5" default="60" showlabels></sdpi-range>
+	</sdpi-item>
+
+	<sdpi-item label="">
+		<sdpi-button id="rescan">Rescan devices</sdpi-button>
+	</sdpi-item>
+
+	<div class="group-heading">Layout</div>
+
+	<sdpi-item label="Meter style">
+		<sdpi-select setting="style" default="bar">
+			<option value="bar">Battery bar</option>
+			<option value="ring">Ring</option>
+			<option value="text">Percentage only</option>
+		</sdpi-select>
+	</sdpi-item>
+
+	<sdpi-item label="Show">
+		<sdpi-checkbox setting="showIcon" default="true" label="Device icon"></sdpi-checkbox>
+		<sdpi-checkbox setting="showPercent" default="true" label="Percentage"></sdpi-checkbox>
+		<sdpi-checkbox setting="showName" label="Name line"></sdpi-checkbox>
+	</sdpi-item>
+
+	<sdpi-item label="Name line shows">
+		<sdpi-select setting="nameSource" default="auto">
+			<option value="auto">My title if I set one, else device name</option>
+			<option value="device">Device name</option>
+			<option value="title">My title</option>
+		</sdpi-select>
+	</sdpi-item>
+
+	<sdpi-item label="">
+		<span class="hint">
+			To get your own title drawn in the key's style, hide Stream Deck's title with
+			the "T" toggle next to the Title field. Stream Deck paints its title on top of
+			the plugin's image and won't let a plugin clear a title you typed, so while it
+			is visible the plugin leaves the name line to the device name instead of
+			printing the same text twice.
+		</span>
+	</sdpi-item>
+
+	<sdpi-item label="Key title">
+		<sdpi-select setting="titleMode" default="none">
+			<option value="none">Leave my title alone</option>
+			<option value="device">Device name</option>
+			<option value="percent">Percentage</option>
+		</sdpi-select>
+	</sdpi-item>
+
+	<sdpi-item label="">
+		<span class="hint">Stream Deck ignores plugin titles on a key where you typed your own title — clear the Title field above to let this take effect.</span>
+	</sdpi-item>
+
+	<div class="group-heading">Thresholds</div>
+
+	<sdpi-item label="Low at or below">
+		<sdpi-range setting="lowThreshold" min="0" max="50" step="1" default="20" showlabels></sdpi-range>
+	</sdpi-item>
+
+	<sdpi-item label="Medium at or below">
+		<sdpi-range setting="mediumThreshold" min="10" max="90" step="1" default="50" showlabels></sdpi-range>
+	</sdpi-item>
+
+	<sdpi-item label="Alert below">
+		<sdpi-range setting="alertBelow" min="0" max="50" step="1" default="0" showlabels></sdpi-range>
+	</sdpi-item>
+
+	<sdpi-item label="">
+		<span class="hint">Alert below 0 is off. Above 0, the key flashes Stream Deck's warning icon on every refresh while the level is under it.</span>
+	</sdpi-item>
+
+	<div class="group-heading">Colours</div>
+
+	<sdpi-item label="Low">
+		<sdpi-color setting="colorLow" default="#e35d5d"></sdpi-color>
+	</sdpi-item>
+
+	<sdpi-item label="Medium">
+		<sdpi-color setting="colorMedium" default="#e3b34d"></sdpi-color>
+	</sdpi-item>
+
+	<sdpi-item label="High">
+		<sdpi-color setting="colorHigh" default="#2ecc71"></sdpi-color>
+	</sdpi-item>
+
+	<sdpi-item label="Charging">
+		<sdpi-color setting="colorCharging" default="#3ddc84"></sdpi-color>
+	</sdpi-item>
+
+	<sdpi-item label="">
+		<span class="hint">While charging the key shows a bolt and breathes slowly in the charging colour.</span>
+	</sdpi-item>
+
+	<sdpi-item label="Icon / outline">
+		<sdpi-color setting="colorForeground" default="#eaeaea"></sdpi-color>
+	</sdpi-item>
+
+	<sdpi-item label="Background">
+		<sdpi-color setting="colorBackground" default="#1e2024"></sdpi-color>
+	</sdpi-item>
+
+	<div class="group-heading">About</div>
+
+	<sdpi-item label="">
+		<span class="hint">
+			Detected via HeadsetControl (headsets), HID++ (Logitech), USB descriptors (Asus)
+			and the Windows Bluetooth battery property. Devices marked "no battery data"
+			were found but expose no readable battery level.
+		</span>
+	</sdpi-item>
+
+	<script>
+		document.getElementById("rescan").addEventListener("click", () => {
+			const client = SDPIComponents.streamDeckClient;
+			// v3 exposes send(event, payload); older builds expose sendToPlugin(payload).
+			if (typeof client.sendToPlugin === "function") {
+				client.sendToPlugin({ event: "rescan" });
+			} else {
+				client.send("sendToPlugin", { event: "rescan" });
+			}
+		});
+	</script>
+</body>
+</html>

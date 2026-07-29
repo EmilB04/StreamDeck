@@ -1,0 +1,27 @@
+{
+  "name": "com.emilberglund.batterymonitor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-purpose Stream Deck plugin. Starts with battery monitoring for auto-detected wireless peripherals.",
+  "scripts": {
+    "build": "rollup -c",
+    "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.emilberglund.batterymonitor\"",
+    "sync-deps": "node scripts/sync-runtime-deps.mjs",
+    "scan": "node com.emilberglund.batterymonitor.sdPlugin/bin/scan.js"
+  },
+  "devDependencies": {
+    "@elgato/cli": "^0.3.0",
+    "@rollup/plugin-commonjs": "^28.0.0",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^15.3.0",
+    "@rollup/plugin-typescript": "^12.1.0",
+    "@types/node": "^20.19.43",
+    "rollup": "^4.24.0",
+    "tslib": "^2.7.0",
+    "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "@elgato/streamdeck": "^2.1.0",
+    "node-hid": "^3.1.0"
+  }
+}
