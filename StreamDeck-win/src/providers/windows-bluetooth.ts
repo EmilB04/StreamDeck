@@ -33,13 +33,16 @@ const SCRIPT = [
 	"  Where-Object { $_.InstanceId -like 'BTHLE\\DEV_*' -or $_.InstanceId -like 'BTHENUM\\DEV_*' };",
 	"$names = @{};",
 	"foreach ($d in $devices) { $names[$d.InstanceId] = $d.FriendlyName }",
+	// Devices without the property are kept, with a null level: they're still
+	// real paired peripherals worth listing, they just can't report a level.
 	"$out = $devices | Get-PnpDeviceProperty -KeyName $key |",
-	"  Where-Object { $_.Data -ne $null } |",
-	"  ForEach-Object { [pscustomobject]@{ id=$_.InstanceId; name=$names[$_.InstanceId]; level=[int]$_.Data } };",
+	"  ForEach-Object { [pscustomobject]@{",
+	"    id=$_.InstanceId; name=$names[$_.InstanceId];",
+	"    level=$(if ($_.Data -ne $null) { [int]$_.Data } else { $null }) } };",
 	"ConvertTo-Json -InputObject @($out) -Compress",
 ].join(" ");
 
-type PnpBattery = { id: string; name: string; level: number };
+type PnpBattery = { id: string; name: string; level: number | null };
 
 /**
  * Detects Bluetooth peripherals that report battery to Windows itself. This is
@@ -51,6 +54,13 @@ type PnpBattery = { id: string; name: string; level: number };
 export class WindowsBluetoothProvider implements BatteryProvider {
 	readonly id = "winbt";
 
+	/**
+	 * The PnP property is a bare percentage. Windows keeps a Boolean next to it
+	 * ({104EA319-…} 3) that looks like it should be a charging flag, but it stays
+	 * False on a phone whose level is visibly climbing, so it isn't one.
+	 */
+	readonly reportsCharging = false;
+
 	async discover(): Promise<DiscoveredDevice[]> {
 		const entries = await this.query();
 		return entries.map((entry) => ({
@@ -58,7 +68,7 @@ export class WindowsBluetoothProvider implements BatteryProvider {
 			providerId: this.id,
 			label: entry.name?.trim() || "Bluetooth device",
 			kind: kindOf(entry.name ?? ""),
-			supportsBattery: true,
+			supportsBattery: entry.level !== null,
 			locator: { instanceId: entry.id },
 			reading: toReading(entry),
 		}));
@@ -95,7 +105,11 @@ export class WindowsBluetoothProvider implements BatteryProvider {
 
 			const parsed = JSON.parse(stdout.trim() || "[]");
 			const list: PnpBattery[] = Array.isArray(parsed) ? parsed : [parsed];
-			return list.filter((e) => e && typeof e.id === "string" && Number.isFinite(Number(e.level)));
+			// A missing property comes back as JSON null, and Number(null) is 0 —
+			// which would report a healthy device as flat. Only a real number counts.
+			return list
+				.filter((e) => e && typeof e.id === "string")
+				.map((e) => ({ ...e, level: typeof e.level === "number" && Number.isFinite(e.level) ? e.level : null }));
 		} catch {
 			// PowerShell missing/blocked, or no Bluetooth stack — just contribute nothing.
 			return [];
@@ -105,7 +119,22 @@ export class WindowsBluetoothProvider implements BatteryProvider {
 
 function toReading(entry: PnpBattery): BatteryReading {
 	const label = entry.name?.trim() || "Bluetooth device";
-	const percent = Math.max(0, Math.min(100, Math.round(Number(entry.level))));
+
+	// Only Bluetooth LE devices that implement the GATT battery service get the
+	// property. A Classic device without it may well have a battery Windows can't
+	// see (AirPods report theirs over Apple's own protocol), so this says
+	// "unreadable", not "mains" — the key's power-source setting is how you tell
+	// it the thing is permanently plugged in.
+	if (entry.level === null) {
+		return {
+			deviceLabel: label,
+			percent: null,
+			status: "unsupported",
+			detail: "Paired, but Windows has no battery level for it",
+		};
+	}
+
+	const percent = Math.max(0, Math.min(100, Math.round(entry.level)));
 	// Windows exposes the GATT level only; there is no charging flag in this property.
 	return { deviceLabel: label, percent, status: "ok" };
 }

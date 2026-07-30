@@ -12,7 +12,9 @@
 			font-size: 10px;
 			text-transform: uppercase;
 			letter-spacing: 0.08em;
-			opacity: 0.55;
+			/* Set explicitly: this sits outside sdpi-item, so it inherits the
+			   document's default text colour rather than the inspector's. */
+			color: rgba(255, 255, 255, 0.7);
 			text-align: right;
 			padding-right: 8px;
 			width: 94px;
@@ -22,6 +24,21 @@
 			font-size: 11px;
 			line-height: 1.4;
 		}
+		.hint p {
+			margin: 0 0 8px 0;
+		}
+		.hint p:last-child {
+			margin-bottom: 0;
+		}
+		/* Live readout under a slider: sdpi-range only shows its min/max labels. */
+		.value {
+			display: block;
+			margin-top: 2px;
+			text-align: center;
+			font-size: 11px;
+			font-weight: 600;
+			color: rgba(255, 255, 255, 0.85);
+		}
 	</style>
 </head>
 <body>
@@ -30,10 +47,10 @@
 		plugin to scan the machine, and the plugin answers with whatever its
 		providers actually found (see src/providers/discovery.ts).
 
-		show-refresh gives the built-in refresh button (re-requests the datasource
-		with isRefresh: true); hot-reload makes the component keep listening for
-		sendToPropertyInspector messages, which is what lets "Rescan devices" push
-		a new list.
+		show-refresh gives the built-in refresh button, which re-requests the
+		datasource with isRefresh: true — the plugin treats that as "rescan now"
+		and drops its cache. hot-reload keeps the component listening for
+		sendToPropertyInspector messages, which is how the new list arrives.
 	-->
 	<sdpi-item label="Device">
 		<sdpi-select
@@ -46,12 +63,103 @@
 		></sdpi-select>
 	</sdpi-item>
 
-	<sdpi-item label="Refresh every">
-		<sdpi-range setting="refreshSeconds" min="15" max="300" step="5" default="60" showlabels></sdpi-range>
+	<sdpi-item label="">
+		<span class="hint">
+			Press the refresh button beside the list to scan again — after turning a
+			device on, for instance. A scan takes about 3 seconds. Everything detected
+			is listed, battery-capable devices first: "no battery data" means it was
+			found but reports no level this plugin can read, "mains powered" means it
+			runs off its cable and has no battery to report.
+		</span>
+	</sdpi-item>
+
+	<sdpi-item label="Power source">
+		<sdpi-select setting="powerSource" default="auto">
+			<option value="auto">Work it out automatically</option>
+			<option value="mains">Always plugged in — show a plug</option>
+		</sdpi-select>
 	</sdpi-item>
 
 	<sdpi-item label="">
-		<sdpi-button id="rescan">Rescan devices</sdpi-button>
+		<span class="hint">
+			A device with no readable level could be running off a cable or could have
+			a battery this plugin can't see, and nothing in the protocol says which.
+			Set this to "always plugged in" for the ones you know are wired — a
+			speaker, a display, a desk mic — and the key draws a plug instead of a
+			dash.
+		</span>
+	</sdpi-item>
+
+	<sdpi-item label="Check battery every">
+		<sdpi-range setting="refreshSeconds" min="10" max="300" step="5" default="60" showlabels>
+			<span slot="min">10 sec</span>
+			<span slot="max">300 sec (5 min)</span>
+		</sdpi-range>
+		<span class="value" data-for="refreshSeconds"></span>
+	</sdpi-item>
+
+	<sdpi-item label="">
+		<span class="hint">
+			In seconds. Pressing the key reads the battery immediately, whatever this
+			is set to. Below 10 seconds there would be nothing new to show: readings
+			are cached for 10 seconds so the key and this panel don't scan in lockstep.
+		</span>
+	</sdpi-item>
+
+	<sdpi-item label="Timing">
+		<sdpi-select setting="pollMode" default="fixed">
+			<option value="fixed">Always use that interval</option>
+			<option value="adaptive">Adapt to what the battery is doing</option>
+		</sdpi-select>
+	</sdpi-item>
+
+	<sdpi-item label="">
+		<span class="hint">
+			Every check spawns a couple of helper processes and opens the device, so
+			adaptive spends them where they matter: every 15 sec while charging and
+			every 30 sec once the level is low (never slower than the interval above),
+			backing off to as much as 10 min while the reading holds steady, and to
+			2 min while the device is off. Any change snaps it back to your interval.
+		</span>
+	</sdpi-item>
+
+	<sdpi-item label="If device is off">
+		<sdpi-checkbox setting="showLastKnown" default="true" label="Show its last known level"></sdpi-checkbox>
+	</sdpi-item>
+
+	<sdpi-item label="">
+		<span class="hint">
+			A device that is switched off or out of range keeps showing the level it
+			last reported — faded, and marked with a crossed-out circle. The name line
+			(if it is on) is prefixed with how long ago that was. Turn this off to show
+			a dash instead.
+		</span>
+	</sdpi-item>
+
+	<sdpi-item label="Pressing opens">
+		<sdpi-select
+			setting="pressTarget"
+			datasource="getApps"
+			show-refresh
+			hot-reload
+			placeholder="Reading the Start menu…"
+			loading="Reading the Start menu…"
+		></sdpi-select>
+	</sdpi-item>
+
+	<sdpi-item label="…or this path">
+		<sdpi-textfield setting="pressCustomTarget" placeholder="C:\…\app.exe, a document, or steam://"></sdpi-textfield>
+	</sdpi-item>
+
+	<sdpi-item label="">
+		<span class="hint">
+			The list is your Start menu, Store apps included. Pick "Don't open
+			anything" to have a press only read the battery. The box below takes
+			anything Windows can open — a path, a document, or a link such as
+			<code>steam://</code> or <code>https://</code> — and wins over the list
+			when it isn't empty. A press always reads the battery as well, and still
+			warns you if the device is disconnected.
+		</span>
 	</sdpi-item>
 
 	<div class="group-heading">Layout</div>
@@ -59,18 +167,18 @@
 	<sdpi-item label="Meter style">
 		<sdpi-select setting="style" default="bar">
 			<option value="bar">Battery bar</option>
-			<option value="ring">Ring</option>
+			<option value="ring">Ring around the key</option>
 			<option value="text">Percentage only</option>
 		</sdpi-select>
 	</sdpi-item>
 
-	<sdpi-item label="Show">
+	<sdpi-item label="Draw on the key">
 		<sdpi-checkbox setting="showIcon" default="true" label="Device icon"></sdpi-checkbox>
 		<sdpi-checkbox setting="showPercent" default="true" label="Percentage"></sdpi-checkbox>
 		<sdpi-checkbox setting="showName" label="Name line"></sdpi-checkbox>
 	</sdpi-item>
 
-	<sdpi-item label="Name line shows">
+	<sdpi-item label="Name line text">
 		<sdpi-select setting="nameSource" default="auto">
 			<option value="auto">My title if I set one, else device name</option>
 			<option value="device">Device name</option>
@@ -88,7 +196,7 @@
 		</span>
 	</sdpi-item>
 
-	<sdpi-item label="Key title">
+	<sdpi-item label="Stream Deck title">
 		<sdpi-select setting="titleMode" default="none">
 			<option value="none">Leave my title alone</option>
 			<option value="device">Device name</option>
@@ -100,22 +208,39 @@
 		<span class="hint">Stream Deck ignores plugin titles on a key where you typed your own title — clear the Title field above to let this take effect.</span>
 	</sdpi-item>
 
-	<div class="group-heading">Thresholds</div>
+	<div class="group-heading">Levels</div>
 
-	<sdpi-item label="Low at or below">
-		<sdpi-range setting="lowThreshold" min="0" max="50" step="1" default="20" showlabels></sdpi-range>
+	<sdpi-item label="Low colour up to">
+		<sdpi-range setting="lowThreshold" min="0" max="50" step="1" default="20" showlabels>
+			<span slot="min">0%</span>
+			<span slot="max">50%</span>
+		</sdpi-range>
+		<span class="value" data-for="lowThreshold"></span>
 	</sdpi-item>
 
-	<sdpi-item label="Medium at or below">
-		<sdpi-range setting="mediumThreshold" min="10" max="90" step="1" default="50" showlabels></sdpi-range>
+	<sdpi-item label="Medium colour up to">
+		<sdpi-range setting="mediumThreshold" min="10" max="90" step="1" default="50" showlabels>
+			<span slot="min">10%</span>
+			<span slot="max">90%</span>
+		</sdpi-range>
+		<span class="value" data-for="mediumThreshold"></span>
 	</sdpi-item>
 
-	<sdpi-item label="Alert below">
-		<sdpi-range setting="alertBelow" min="0" max="50" step="1" default="0" showlabels></sdpi-range>
+	<sdpi-item label="Flash warning below">
+		<sdpi-range setting="alertBelow" min="0" max="50" step="1" default="0" showlabels>
+			<span slot="min">off</span>
+			<span slot="max">50%</span>
+		</sdpi-range>
+		<span class="value" data-for="alertBelow"></span>
 	</sdpi-item>
 
 	<sdpi-item label="">
-		<span class="hint">Alert below 0 is off. Above 0, the key flashes Stream Deck's warning icon on every refresh while the level is under it.</span>
+		<span class="hint">
+			In percent. Above the medium threshold the meter uses the high colour. Set the
+			warning to 0 to disable it; above 0, the key flashes Stream Deck's warning
+			icon on every check while a live reading is under it (a last known level
+			never triggers it).
+		</span>
 	</sdpi-item>
 
 	<div class="group-heading">Colours</div>
@@ -133,14 +258,20 @@
 	</sdpi-item>
 
 	<sdpi-item label="Charging">
-		<sdpi-color setting="colorCharging" default="#3ddc84"></sdpi-color>
+		<sdpi-color setting="colorCharging" default="#55ff7f"></sdpi-color>
 	</sdpi-item>
 
 	<sdpi-item label="">
-		<span class="hint">While charging the key shows a bolt and breathes slowly in the charging colour.</span>
+		<span class="hint">
+			While charging the key shows a bolt in the top left and breathes slowly in
+			the charging colour. Devices whose battery Windows reports as a bare
+			percentage — phones and other Bluetooth LE devices — can't say whether
+			they're charging, so for those the bolt appears once the level is seen
+			rising.
+		</span>
 	</sdpi-item>
 
-	<sdpi-item label="Icon / outline">
+	<sdpi-item label="Icon &amp; outline">
 		<sdpi-color setting="colorForeground" default="#eaeaea"></sdpi-color>
 	</sdpi-item>
 
@@ -151,23 +282,62 @@
 	<div class="group-heading">About</div>
 
 	<sdpi-item label="">
-		<span class="hint">
-			Detected via HeadsetControl (headsets), HID++ (Logitech), USB descriptors (Asus)
-			and the Windows Bluetooth battery property. Devices marked "no battery data"
-			were found but expose no readable battery level.
-		</span>
+		<div class="hint">
+			<p>
+				Shows the battery level of a wireless peripheral on a key. Nothing is
+				hard-coded per model: the plugin enumerates what this machine can
+				actually see, so the device list is whatever is plugged in or paired
+				right now.
+			</p>
+			<p>
+				Levels are read through whichever of these fits the device:
+				<b>HeadsetControl</b> for gaming headsets (a separate tool, and it must
+				be on your PATH), <b>HID++</b> for Logitech receivers and devices, raw
+				<b>USB/HID</b> reports for Asus devices, and the <b>Windows Bluetooth</b>
+				battery property for anything paired over Bluetooth LE.
+			</p>
+			<p>
+				A device with no readable battery is still listed, marked "no battery
+				data", so you can tell "not supported" apart from "not detected". Battery
+				levels from wireless devices are coarse by nature — many report in steps
+				of 10% or in four levels, so expect the number to move in jumps.
+			</p>
+		</div>
 	</sdpi-item>
 
 	<script>
-		document.getElementById("rescan").addEventListener("click", () => {
-			const client = SDPIComponents.streamDeckClient;
-			// v3 exposes send(event, payload); older builds expose sendToPlugin(payload).
-			if (typeof client.sendToPlugin === "function") {
-				client.sendToPlugin({ event: "rescan" });
-			} else {
-				client.send("sendToPlugin", { event: "rescan" });
-			}
-		});
+		// sdpi-range shows its min and max, never the value you're on, so each
+		// slider gets a readout of its own underneath.
+		//
+		// Two events are needed. The component itself only commits (and so only
+		// fires "valuechange") when the drag ends or when it hydrates from the
+		// persisted settings; the continuous "input" event comes from the plain
+		// <input type="range"> inside its shadow root, which is why the live value
+		// is read off composedPath() rather than off the component.
+		const UNITS = {
+			refreshSeconds: (v) => (v >= 60 && v % 60 === 0 ? `${v} sec (${v / 60} min)` : `${v} sec`),
+			lowThreshold: (v) => `${v}%`,
+			mediumThreshold: (v) => `${v}%`,
+			alertBelow: (v) => (v === 0 ? "off" : `${v}%`),
+		};
+
+		for (const range of document.querySelectorAll("sdpi-range[setting]")) {
+			const setting = range.getAttribute("setting");
+			const output = document.querySelector(`.value[data-for="${setting}"]`);
+			if (!output) continue;
+
+			const format = UNITS[setting] ?? ((v) => `${v}`);
+			const show = (value) => {
+				const number = Number(value);
+				if (Number.isFinite(number)) output.textContent = format(number);
+			};
+
+			range.addEventListener("valuechange", () => show(range.value));
+			range.addEventListener("input", (ev) => show(ev.composedPath()[0]?.valueAsNumber));
+
+			// Until the persisted value arrives, show what the slider itself starts on.
+			show(range.value ?? range.getAttribute("default"));
+		}
 	</script>
 </body>
 </html>

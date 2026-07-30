@@ -21,14 +21,25 @@ cached for 10s (`src/providers/discovery.ts`).
 | `headsetcontrol.ts` | Every headset [HeadsetControl](https://github.com/Sapd/HeadsetControl) supports (~100 models across HyperX, SteelSeries, Corsair, Logitech, Razer…) | Shells out to the CLI, which has already reverse-engineered each headset's HID report. Names come from its output. |
 | `logitech.ts` | Every device paired to every Logitech receiver, plus directly-connected ones | HID++ 2.0 over `node-hid`. Product name and form factor are read from the device itself (feature `0x0005`), battery from `0x1004` Unified Battery, falling back to legacy `0x1000`. |
 | `asus.ts` | Any ASUSTek HID device that presents as a peripheral, named from its USB product descriptor | The ROG receiver's vendor collection. No public spec; the protocol was derived on real hardware and validated against Armoury Crate — see "Asus battery protocol". |
-| `windows-bluetooth.ts` | Any Bluetooth peripheral Windows itself tracks a battery level for | The `DEVPKEY_Bluetooth_Battery` PnP property (the same number the Settings app shows), read via PowerShell. Vendor-independent, so it covers devices no dedicated provider knows about — but only over Bluetooth, not proprietary 2.4 GHz dongles. |
+| `dualsense.ts` | PlayStation 5 controllers (DualSense, DualSense Edge), over USB or Bluetooth | The pad's own input report — see "DualSense battery". Needed because neither OS route sees it: it pairs as Bluetooth Classic, so there's no GATT battery service for Windows to mirror, and over USB it's a plain HID gamepad. |
+| `windows-bluetooth.ts` | Every paired, present Bluetooth device | The `DEVPKEY_Bluetooth_Battery` PnP property (the same number the Settings app shows), read via PowerShell. Vendor-independent, so it covers devices no dedicated provider knows about — but only Bluetooth **LE** devices with a GATT battery service have the property at all. Classic devices are still listed, without a level. |
+| `generic-hid.ts` | Everything else on HID, so nothing is invisible | Nothing — no battery protocol. Cable-connected devices are reported as mains powered; wireless ones (and anything named like a receiver) as unreadable, since they may well have a battery this plugin can't see. |
 
 Device identity is persisted as a stable key, not a HID path: Logitech devices
 use their HID++ unit id, headsets their USB vendor/product ids, Bluetooth
-devices their PnP instance id. Unplugging and replugging keeps the key working.
+devices their PnP instance id, a DualSense its MAC address. Unplugging and replugging keeps the key working.
 
 A scan takes ~3s, and results are cached for 10s so the property inspector and
 the key don't rescan in lockstep. Pressing the key forces a fresh read.
+
+Everything detected is listed, with the devices that can actually report a level
+sorted first. One piece of hardware can reach two providers — a DualSense is
+both a Sony HID device and a paired Bluetooth node; a HyperX headset is both a
+HeadsetControl device and a plain HID interface — so `mergeGeneric` drops the
+entry that can't read a battery when another one can. Matching is on the name,
+loosely enough to survive the HID layer's manufacturer prefix ("HP, Inc HyperX
+Cloud Alpha Wireless" vs "HyperX Cloud Alpha Wireless") but falling back to
+equality for names too short to match safely.
 
 ## Requirements
 
@@ -47,8 +58,29 @@ npx @elgato/cli link    # symlinks com.emilberglund.batterymonitor.sdPlugin into
 ```
 
 Then in the Stream Deck app, drag the "Device Battery" action onto a key, and
-pick the device + refresh interval in the property inspector. "Rescan devices"
-re-enumerates without restarting the plugin.
+pick the device + interval in the property inspector. The refresh button beside
+the device list re-enumerates without restarting the plugin.
+
+### Developing from WSL
+
+Working on the source in WSL while Stream Deck runs on Windows needs one extra
+step, because a WSL path can't back the symlink under `%APPDATA%` and
+`streamdeck restart` can't be driven from a WSL shell at all — cmd.exe refuses a
+UNC working directory, after which the CLI reports "Stream Deck is not running"
+and quietly does nothing. So the Windows-side copy of
+`com.emilberglund.batterymonitor.sdPlugin` stays the deploy target:
+
+```sh
+npm run deploy          # build, rsync to the installed plugin folder, restart the plugin
+```
+
+It resolves the target by following the link Stream Deck actually loads (set
+`SD_PLUGIN_DIR` to override), skips `logs/`, and restarts by killing the
+plugin's `node.exe` — Stream Deck respawns it within a couple of seconds.
+`npm run watch` is Windows-only for the same CLI reason.
+
+`npm run sync-deps` must still be run **on Windows**: it installs node-hid's
+native binary, and the one WSL produces won't load inside Stream Deck.
 
 ## Customizing the key
 
@@ -56,27 +88,164 @@ Everything below is per-key, in the property inspector.
 
 | Setting | Options | Default |
 |---|---|---|
-| Meter style | Battery bar / Ring / Percentage only | Battery bar |
-| Show | device icon, percentage, name line (any combination) | icon + percentage |
-| Name line shows | my title if set, else device name / device name / my title | my title if set |
-| Key title | leave my title alone / device name / percentage | leave alone |
-| Low at or below | 0–50% — switches the meter to the low colour | 20 |
-| Medium at or below | 10–90% — switches the meter to the medium colour | 50 |
-| Alert below | 0 disables; above 0 flashes Stream Deck's warning icon while under it | 0 |
-| Colours | low, medium, high, charging, icon/outline, background | see below |
+| Device | whatever discovery found; the refresh button beside it rescans | first battery-capable device |
+| Power source | work it out automatically, or "always plugged in" to force the plug symbol | automatic |
+| Check battery every | 10–300 seconds | 60 |
+| Timing | always use that interval, or adapt to what the battery is doing | always use it |
+| When pressed | check the battery, or check it and open an app/file/URL | check the battery |
+| If device is off | show its last known level, or a dash | show last known |
+| Meter style | Battery bar / Ring around the key / Percentage only | Battery bar |
+| Draw on the key | device icon, percentage, name line (any combination) | icon + percentage |
+| Name line text | my title if set, else device name / device name / my title | my title if set |
+| Stream Deck title | leave my title alone / device name / percentage | leave alone |
+| Low colour up to | 0–50% | 20 |
+| Medium colour up to | 10–90% — above it, the high colour | 50 |
+| Flash warning below | 0 disables; above 0 flashes Stream Deck's warning icon while a live reading is under it | 0 |
+| Colours | low, medium, high, charging, icon & outline, background | see below |
 
-Defaults: low `#e35d5d`, medium `#e3b34d`, high `#2ecc71`, charging `#3ddc84`,
+Defaults: low `#e35d5d`, medium `#e3b34d`, high `#2ecc71`, charging `#55ff7f`,
 foreground `#eaeaea`, background `#1e2024`.
 
-While charging, the key shows a bolt and breathes slowly in the charging colour
+While charging, the key shows a bolt in the top left and breathes slowly in the charging colour
 (a ~3.6s opacity swing between 0.78 and 1.0). Stream Deck rasterises each image
 once, so SMIL/CSS animation inside the SVG does nothing — the movement comes
 from the plugin re-sending a frame every 450ms. Frames are pure re-renders of
 the cached reading, so an animating key does no device I/O.
 
-The charging default changed from blue to green in settings v2. Existing keys
-are migrated automatically, but only if their charging colour is still the old
-default — a colour you picked yourself is left alone.
+### Polling
+
+Every check costs real work: a spawned HeadsetControl, a spawned PowerShell for
+the Bluetooth property, and HID handles opened on the Logitech, Asus and Sony
+devices. At the 60s default that's fine; at 10s it's a scan running about a
+quarter of the time, forever, for a number that on most devices moves in steps
+of 10%.
+
+**Timing: adapt** trades that fixed cadence for one driven by the reading
+(`adaptiveSeconds` in `src/actions/settings.ts`):
+
+| State | Next check |
+|---|---|
+| Charging | 15s |
+| At or below the low threshold | 30s |
+| Steady reading | your interval × 1.5 per unchanged reading, up to 10 min |
+| Device off / erroring | 2 min, or your interval if that's longer |
+
+Your configured interval is the baseline, not a ceiling: charging and low levels
+can only *shorten* it, so a key set to 15s stays at 15s throughout, and any
+change in the percentage resets the backoff. `MIN_REFRESH_SECONDS` (10s) remains
+the floor, and pressing the key always reads immediately.
+
+Polling is a chain of one-shot timers rather than an interval, so each tick can
+pick its own successor. In fixed mode every link is the same length, which is
+the old behaviour exactly.
+
+### Devices with no battery
+
+A device that never runs on a battery has no percentage to show, and drawing a
+dash for it says "something is wrong" when nothing is. Those keys draw a plug in
+place of the meter and the number instead — the icon and name line stay, so the
+key still identifies what it's for.
+
+Two things produce that state. The catch-all HID provider marks cable-connected
+devices as mains powered automatically, since a wired mic or a USB fan cannot
+have a battery. Everything else is a judgement call the plugin can't make: a
+Bluetooth speaker reporting no level looks exactly like a headset whose battery
+Windows can't read, so those stay on "no battery data" until you set the key's
+**Power source** to "always plugged in", which forces the plug.
+
+The picker says which is which: `(mains powered)` versus `(no battery data)`.
+
+### Pressing the key
+
+A press always reads the device immediately, bypassing the discovery cache. Set
+**When pressed** to "check the battery and open an app" to have it also open
+something: pick from the installed-app list, or type any path, document or link
+the shell can handle (`steam://`, `https://`, a `.lnk`). Both controls write the
+same setting, and a typed value stays selected in the list.
+
+The app list comes from `Get-StartApps` (`src/actions/apps.ts`) — everything the
+Start menu can launch, Store apps included, which is a superset of "things with
+a shortcut on disk". It's cached for 5 minutes and the picker's refresh button
+drops the cache; obvious non-apps (uninstallers, readmes, "visit our website")
+are filtered out.
+
+Apps are stored as `app:<AppID>` and launched with
+`explorer.exe shell:AppsFolder\<AppID>`, the same route the Start menu takes.
+The prefix is needed because an AppID isn't distinguishable from a path or a URL
+by shape — Windows hands back `Microsoft.WindowsCalculator_8wekyb3d8bbwe!App`,
+`{6D809377-…}\Android\…\studio.exe` and `steam://rungameid/1172470` from the
+same list — and only the AppsFolder route resolves the first kind.
+
+The launch happens first, before the scan — waiting on ~2.3s of HID work would
+make the app feel slow to open. It's spawned detached and unreferenced so it
+outlives the plugin and doesn't hold Node's event loop open, and on Windows it
+goes through `cmd /c start "" <target>`; the empty first argument is the window
+title `start` would otherwise take a quoted path to be. A bad path is logged
+rather than shown on the key: the key's warning means "your device is gone", and
+giving it a second meaning would blunt both.
+
+If the device isn't connected, the press also flashes Stream Deck's warning icon
+and puts **"Device is Disconnected"** on the key for 2.5s before restoring the
+face. Without that, pressing a key for a device that's gone looks like nothing
+happened at all: the face is already showing the last known level, and a fresh
+read doesn't change it. Stream Deck gives a plugin no toast or tooltip, so the
+key itself carries the words (`noticeKeyImage`).
+
+The warning goes up **before** the forced scan, not after it. The key already
+knows the device was missing a moment ago, and that's what the press is asking
+about; waiting for a ~2.3s rescan to confirm it made the press look ignored.
+While a message is up, `render` is a no-op, so the scan finishing behind it
+can't replace the words with the face mid-message — the reading is still cached
+and gets drawn when the message clears. A scan that *discovers* the device is
+gone still raises the warning at that point, which is the earliest it can be
+known.
+
+### Offline devices
+
+A wireless device that is switched off or out of range simply stops being
+detected, and a key that answered "—" would throw away the one thing still worth
+knowing: where the battery was when it disappeared. So the last percentage a
+device actually reported is stored per key (in the action's settings, so it
+survives a plugin restart or a reboot) and is what the key shows while the
+device is gone:
+
+- the whole face is drawn at 45% opacity, so it can't be mistaken for a live
+  reading, while the meter keeps its threshold colour so the level still reads
+  at a glance;
+- a crossed-out circle in the top left marks it as not live;
+- the name line, if it's on, is prefixed with the age of that reading (`3h ·
+  Kraken V3`) — the age goes first because the line truncates from the right;
+- the "percentage" key title gets a `~` prefix (`~78%`).
+
+The stored level is only written when the percentage changes (or its timestamp
+has drifted more than 10 minutes), so an idle key isn't writing settings every
+poll. "Flash warning below" deliberately ignores a last-known level — otherwise a device
+left switched off below the threshold would flash forever. A device that exposes
+no battery at all still shows `N/A`, since there is no earlier level it could
+fall back to.
+
+The charging default has changed twice: blue to green in settings v2, then to a
+brighter green in v4. Existing keys are migrated automatically, but only if
+their charging colour is still one this plugin chose (`LEGACY_CHARGING_COLORS`)
+— a colour you picked yourself is left alone.
+
+### Charging without a charging flag
+
+Not every source can say whether a device is charging. The Windows PnP battery
+property is a bare percentage, so a phone on a charger looks exactly like one in
+a pocket; Windows keeps a Boolean next to it (`{104EA319-…} 3`) that looks like
+it ought to be the flag, but it stays `False` on a phone whose level is visibly
+climbing, so it isn't one.
+
+A provider declares this with `reportsCharging = false`, and for those devices
+the plugin infers it: **a level that has gone up since the last reading can only
+have come from a charger.** The state sticks while the level holds — a phone
+parked at 100% is still plugged in — and clears as soon as the level drops, or
+as soon as the device disappears (coming back at a higher level means it was
+charged somewhere else, not that it's charging now).
+
+It is a guess, and it's wrong in one case: unplug at a level the device then
+holds, and the bolt stays until the first drop.
 
 ### Layout
 
@@ -247,6 +416,48 @@ If a different ROG device doesn't answer, `node scripts/asus-cmd.mjs --sweep12`
 is the fastest way to find its equivalent sub-command: it prints every reply that
 isn't `ff aa`, and any byte matching the level Armoury Crate shows is flagged.
 
+### DualSense battery
+
+A DualSense reports its battery in the input report it already streams. One byte
+holds both halves of the answer — low nibble is the level in units of 10%, high
+nibble is the charge state — which is the layout Linux's `hid-playstation` uses:
+
+```
+31 41 7e 85 7d 80 00 00 01 08 ... 08 ...
+|  |  |                           |
+|  |  +-- sticks (LX LY RX RY)    +-- [54] status: level 8, state 0 -> 85%, discharging
+|  +----- sequence / flags
++-------- report id
+```
+
+`percent = min(level * 10 + 5, 100)`; the `+5` centres each of the 11 steps
+rather than reporting its floor. State `1` is charging and `2` is charge
+complete — both mean the cable is attached, so both show the charging indicator,
+matching what `logitech.ts` does with its own charge-complete state. `a`/`b` are
+a temperature fault and `f` a charging error.
+
+Note that a DualSense reports "complete" long before its gauge reads full: a pad
+on the charger at level 8 sends `0x28`, i.e. complete at 85%. Linux's driver
+rounds that up to 100%; this one keeps the pad's own level, since claiming 100%
+on a key that then drops to 85% when unplugged is worse than being honest. A
+level of `0` with state `2` is the one combination taken as literally full.
+
+The catch is Bluetooth. The pad connects in a compatibility mode whose report is
+**also** id `0x01` — Windows pads it out to the full 78 bytes, so length can't
+tell them apart, and everything past the sticks and buttons is zero:
+
+```
+01 7e 85 7d 80 08 00 08 00 00 00 00 ...   <- no battery anywhere in here
+```
+
+Reading feature report `0x05` (calibration data) makes it switch to the full
+`0x31` report, and it stays switched. That's a GET_FEATURE — a read — so the
+provider still never writes to the controller; it's also what any game does when
+it takes the pad over. Over USB none of this applies: the report is id `0x01`
+with the status one byte earlier, at `[53]`.
+
+`node scripts/dualsense-probe.mjs` dumps the reports and decodes both candidate
+offsets, which is how the above was verified (85%, matching the pad).
 
 ## Project layout
 
@@ -254,7 +465,11 @@ isn't `ff aa`, and any byte matching the level Armoury Crate shows is flagged.
 src/
   plugin.ts                  entry point, registers actions
   scan.ts                    `npm run scan` — prints discovery results to a terminal
-  actions/battery-status.ts  the "Device Battery" action (polling, rendering, PI datasource)
+  actions/
+    battery-status.ts        the "Device Battery" action (polling, rendering, PI datasource)
+    settings.ts              per-key settings shape, defaults and version migrations
+    apps.ts                  lists installed applications for the picker (Get-StartApps)
+    launch.ts                opens the app/file/URL a press is pointed at
   providers/
     discovery.ts             runs every provider, merges + caches the results
     types.ts                 BatteryProvider / DiscoveredDevice contracts
@@ -263,6 +478,8 @@ src/
     headsetcontrol.ts        headsets, via the HeadsetControl CLI
     logitech.ts              HID++ 2.0 (name, type, unit id, battery)
     asus.ts                  ROG detection (battery not implemented)
+    dualsense.ts             PlayStation 5 pads, from their own input report
+    generic-hid.ts           catch-all: lists remaining HID devices, mains vs unreadable
     windows-bluetooth.ts     Windows PnP Bluetooth battery property
   ui/battery-svg.ts          renders the key face as an SVG data URI (no canvas/image lib needed)
 com.emilberglund.batterymonitor.sdPlugin/
@@ -271,7 +488,10 @@ com.emilberglund.batterymonitor.sdPlugin/
   bin/                       build output (gitignored)
 scripts/
   sync-runtime-deps.mjs      installs node-hid into the .sdPlugin folder
+  deploy.mjs                 `npm run deploy` — WSL -> installed plugin folder, then restarts it
   hid-scan.mjs               lists connected HID devices, for reverse-engineering new providers
+  dualsense-probe.mjs        dumps DualSense input reports and decodes the battery byte
+  gen-icons.py               draws the plugin/action icons at Elgato's asset sizes
 ```
 
 ## Adding a device family

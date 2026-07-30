@@ -1,8 +1,10 @@
 export type BatteryStatus =
 	| "ok"
 	| "charging"
+	| "mains" // runs off the cable; there is no battery to report
 	| "unsupported" // device found, but no battery protocol is implemented for it
 	| "not-found" // device no longer connected / not detected
+	| "stale" // device is gone; the percentage is the last one that was read
 	| "error";
 
 /** Physical form factor of the device, used to pick which icon to draw on the key. */
@@ -36,6 +38,14 @@ export interface DiscoveredDevice {
 
 export interface BatteryProvider {
 	id: string;
+	/**
+	 * Whether a reading from this provider can ever say "charging". False means
+	 * the source carries a level and nothing else (the Windows PnP battery
+	 * property, for one), so a charging device is indistinguishable from one
+	 * sitting still — and the only clue left is the level going up. Defaults to
+	 * true when omitted.
+	 */
+	reportsCharging?: boolean;
 	/** Enumerates everything this provider can see right now. Never throws. */
 	discover(): Promise<DiscoveredDevice[]>;
 	/** Reads a device previously returned by {@link discover}. Never throws. */

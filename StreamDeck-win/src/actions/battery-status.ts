@@ -10,96 +10,96 @@ import type {
 } from "@elgato/streamdeck";
 import { discovery } from "../providers/discovery";
 import type { BatteryReading, DeviceKind, DiscoveredDevice } from "../providers/types";
-import type { BatteryStyle, FaceColors } from "../ui/battery-svg";
-import { batteryKeyImage, DEFAULT_COLORS, LEGACY_CHARGING_COLOR } from "../ui/battery-svg";
+import { batteryKeyImage, noticeKeyImage } from "../ui/battery-svg";
+import { listApps } from "./apps";
+import { openTarget } from "./launch";
+import type { BatterySettings, PollMode } from "./settings";
+import { DEFAULTS, faceColors, migrate, nextPollSeconds, refreshSeconds } from "./settings";
 
-/** What, if anything, the plugin writes into the key's title. */
-export type TitleMode = "none" | "device" | "percent";
-
-/** What the small text line under the meter shows. */
-export type NameSource = "device" | "title" | "auto";
-
-export type BatterySettings = {
-	/** Stable key of a device found by discovery (see providers/discovery.ts). */
-	deviceKey?: string;
-	/** Last known label/kind, so a disconnected device still renders sensibly. */
-	deviceLabel?: string;
-	deviceKind?: DeviceKind;
-	refreshSeconds?: number;
-
-	// Appearance
-	style?: BatteryStyle;
-	showIcon?: boolean;
-	showPercent?: boolean;
-	showName?: boolean;
-	/** Whether that line shows the device name, the user's own title, or the better of the two. */
-	nameSource?: NameSource;
-	titleMode?: TitleMode;
-	lowThreshold?: number;
-	mediumThreshold?: number;
-	colorLow?: string;
-	colorMedium?: string;
-	colorHigh?: string;
-	colorCharging?: string;
-	colorBackground?: string;
-	colorForeground?: string;
-	/** Flash the key's alert icon below this percentage; 0 disables. */
-	alertBelow?: number;
-
-	/** Set once the defaults below have been written out, so the PI shows them. */
-	configured?: boolean;
-	/** Bumped when a default changes in a way existing keys should pick up. */
-	settingsVersion?: number;
-};
-
-/**
- * Messages from the property inspector. `isRefresh` is set by sdpi-components'
- * built-in refresh button; "rescan" comes from our own button.
- */
+/** Messages from the property inspector; `isRefresh` comes from its refresh button. */
 type UiMessage = { event?: string; isRefresh?: boolean };
 
-const MIN_REFRESH_SECONDS = 15;
-
-/** v2: the charging colour moved from blue to green. */
-const SETTINGS_VERSION = 2;
+/** Shown on the key when it's pressed while its device isn't connected. */
+const DISCONNECTED_NOTICE = "Device is Disconnected";
+const NOTICE_MS = 2500;
 
 /** Charging pulse: 8 steps of 450ms, i.e. a slow ~3.6s breath. */
 const PULSE_INTERVAL_MS = 450;
 const PULSE_STEPS = 8;
 
-const DEFAULTS = {
-	refreshSeconds: 60,
-	style: "bar" as BatteryStyle,
-	showIcon: true,
-	showPercent: true,
-	showName: false,
-	nameSource: "auto" as NameSource,
-	titleMode: "none" as TitleMode,
-	lowThreshold: 20,
-	mediumThreshold: 50,
-	colorLow: DEFAULT_COLORS.low,
-	colorMedium: DEFAULT_COLORS.medium,
-	colorHigh: DEFAULT_COLORS.high,
-	colorCharging: DEFAULT_COLORS.charging,
-	colorBackground: DEFAULT_COLORS.background,
-	colorForeground: DEFAULT_COLORS.foreground,
-	alertBelow: 0,
+/**
+ * How long a last-known level's timestamp may drift before it's rewritten. The
+ * percentage is persisted the moment it changes; refreshing the timestamp alone
+ * on every poll would be a settings write per minute forever, and the age is
+ * only ever shown rounded, so a few minutes of slack costs nothing.
+ */
+const LAST_SEEN_TOUCH_MS = 10 * 60_000;
+
+/**
+ * Everything the plugin tracks for one visible key. A key's timers, its last
+ * reading and the bookkeeping used to spot what actually changed all live and
+ * die together, so they're one record rather than a map each.
+ */
+type KeyState = {
+	/**
+	 * Polling is a chain of one-shot timers rather than an interval, because in
+	 * adaptive mode the next wait depends on what the last reading said.
+	 */
+	pollTimer?: NodeJS.Timeout;
+	/** Configured interval and mode the chain was armed with, to spot an edit. */
+	pollBase?: number;
+	pollMode?: PollMode;
+	/** Consecutive readings that said the same thing; drives the adaptive backoff. */
+	unchanged: number;
+	/**
+	 * Whether the level was last seen rising. The only charging signal available
+	 * for a device whose provider can't report one (see inferCharging).
+	 */
+	rising?: boolean;
+	pulseTimer?: NodeJS.Timeout;
+	pulsePhase: number;
+	/**
+	 * Last thing drawn: the live reading (before any last-known substitution),
+	 * the device kind, and the settings drawn with. Enough to repaint for a
+	 * colour edit or a pulse frame without touching the device.
+	 */
+	drawn?: { reading: BatteryReading; kind: DeviceKind; settings: BatterySettings };
+	/** The user's own title, and whether Stream Deck is drawing it itself. */
+	title?: { title: string; showTitle: boolean };
+	/** Device the key was last refreshed for, to spot a changed one. */
+	deviceKey?: string;
+	/** A message is on the key; painting the face is suspended until it clears. */
+	showingNotice?: boolean;
+	noticeTimer?: NodeJS.Timeout;
 };
+
+/**
+ * How a device reads in the picker. Everything detected is listed, so the entry
+ * has to say why one of them won't show a percentage.
+ */
+function pickerLabel(device: DiscoveredDevice): string {
+	if (device.supportsBattery) return device.label;
+	if (device.reading?.status === "mains") return `${device.label} (mains powered)`;
+	return `${device.label} (no battery data)`;
+}
+
+/**
+ * Coarse "how long ago", e.g. "12m" / "3h" / "2d". Empty for anything under a
+ * minute (and for a missing timestamp), where "0m ago" would say nothing.
+ */
+function ageLabel(at: number | undefined): string {
+	if (at === undefined) return "";
+	const minutes = Math.floor((Date.now() - at) / 60_000);
+	if (minutes < 1) return "";
+	if (minutes < 60) return `${minutes}m`;
+	const hours = Math.floor(minutes / 60);
+	if (hours < 24) return `${hours}h`;
+	return `${Math.floor(hours / 24)}d`;
+}
 
 @action({ UUID: "com.emilberglund.batterymonitor.battery-status" })
 export class BatteryStatusAction extends SingletonAction<BatterySettings> {
-	private readonly timers = new Map<string, NodeJS.Timeout>();
-	/** Last reading drawn per key, so appearance edits can repaint without any I/O. */
-	private readonly lastReadings = new Map<string, { reading: BatteryReading; kind: DeviceKind }>();
-	/** Last settings drawn with, so the charging pulse can repaint without a round-trip. */
-	private readonly lastSettings = new Map<string, BatterySettings>();
-	private readonly pulseTimers = new Map<string, NodeJS.Timeout>();
-	private readonly pulsePhase = new Map<string, number>();
-	/** The user's own title per key, and whether Stream Deck is drawing it itself. */
-	private readonly titles = new Map<string, { title: string; showTitle: boolean }>();
-	/** Device and interval last applied per key, to spot what actually changed. */
-	private readonly appliedDevice = new Map<string, string | undefined>();
-	private readonly appliedInterval = new Map<string, number>();
+	private readonly keys = new Map<string, KeyState>();
 
 	override async onWillAppear(ev: WillAppearEvent<BatterySettings>): Promise<void> {
 		if (!ev.action.isKey()) return; // this action only declares a Keypad controller
@@ -109,13 +109,12 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 	}
 
 	override onWillDisappear(ev: WillDisappearEvent<BatterySettings>): void {
-		this.clearTimer(ev.action.id);
-		this.stopPulse(ev.action.id);
-		this.titles.delete(ev.action.id);
-		this.lastReadings.delete(ev.action.id);
-		this.lastSettings.delete(ev.action.id);
-		this.appliedDevice.delete(ev.action.id);
-		this.appliedInterval.delete(ev.action.id);
+		const state = this.keys.get(ev.action.id);
+		if (!state) return;
+		clearTimeout(state.pollTimer);
+		clearInterval(state.pulseTimer);
+		clearTimeout(state.noticeTimer);
+		this.keys.delete(ev.action.id);
 	}
 
 	/**
@@ -125,21 +124,89 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 	override async onTitleParametersDidChange(ev: TitleParametersDidChangeEvent<BatterySettings>): Promise<void> {
 		if (!ev.action.isKey()) return;
 
+		const state = this.state(ev.action.id);
 		const next = { title: ev.payload.title ?? "", showTitle: ev.payload.titleParameters.showTitle };
-		const previous = this.titles.get(ev.action.id);
-		this.titles.set(ev.action.id, next);
+		const previous = state.title;
+		state.title = next;
 
 		// Setting the title ourselves (titleMode) echoes back through this event;
 		// only repaint on a real change so that can't turn into a loop.
 		if (previous?.title === next.title && previous?.showTitle === next.showTitle) return;
 
-		const cached = this.lastReadings.get(ev.action.id);
-		if (cached) await this.render(ev.action, ev.payload.settings, cached.reading, cached.kind);
+		const drawn = state.drawn;
+		if (drawn) await this.render(ev.action, ev.payload.settings, drawn.reading, drawn.kind);
 	}
 
+	/**
+	 * A press means "tell me now", so it bypasses the discovery cache — and a
+	 * forced scan takes a couple of seconds.
+	 *
+	 * The warning therefore goes up *before* the scan rather than after it. The
+	 * key already knows the device was missing a moment ago, and that's what the
+	 * press is asking about; waiting for the rescan to confirm it would leave the
+	 * press looking ignored for as long as the scan takes.
+	 */
 	override async onKeyDown(ev: KeyDownEvent<BatterySettings>): Promise<void> {
-		// A press means "tell me now", so bypass the discovery cache.
+		// First, because it's the part the press is visibly for: waiting on a scan
+		// before launching would make the app feel slow to open.
+		this.openConfiguredTarget(ev.payload.settings);
+
+		const known = this.state(ev.action.id).drawn;
+		const wasDisconnected = known?.reading.status === "not-found";
+		if (wasDisconnected && known) await this.notify(ev.action, known.settings);
+
 		await this.refresh(ev.action, ev.payload.settings, true);
+
+		// The scan can also be what discovers the device is gone, in which case
+		// this is the first chance to say so.
+		const now = this.state(ev.action.id).drawn;
+		if (!wasDisconnected && now?.reading.status === "not-found") {
+			await this.notify(ev.action, now.settings);
+		}
+	}
+
+	/**
+	 * Opens the app, file or URL the key is pointed at, if it's set to.
+	 *
+	 * A failure here is logged rather than surfaced: the warning the key can show
+	 * is about the device, and overloading it to also mean "that path is wrong"
+	 * would make both meanings useless.
+	 */
+	private openConfiguredTarget(settings: BatterySettings): void {
+		// A typed path beats the picker, so the text box can override without
+		// having to clear the list first.
+		const target = settings.pressCustomTarget?.trim() || settings.pressTarget?.trim();
+		if (!target) return;
+
+		try {
+			streamDeck.logger.info(`battery-status: press opens ${target}`);
+			openTarget(target);
+		} catch (err) {
+			streamDeck.logger.error(`battery-status: couldn't open ${target}`, err);
+		}
+	}
+
+	/**
+	 * Puts a message on the key for a moment. Painting is suspended while it's up
+	 * — the refresh running behind it would otherwise replace it with the face
+	 * mid-message — and resumes when the face is restored.
+	 */
+	private async notify(action: KeyAction<BatterySettings>, settings: BatterySettings): Promise<void> {
+		const state = this.state(action.id);
+		clearTimeout(state.noticeTimer);
+		state.showingNotice = true;
+
+		await action.showAlert();
+		await action.setImage(noticeKeyImage(DISCONNECTED_NOTICE, faceColors(settings)));
+
+		state.noticeTimer = setTimeout(() => {
+			state.showingNotice = false;
+			const current = state.drawn;
+			if (!current) return;
+			this.render(action, current.settings, current.reading, current.kind).catch((err) =>
+				streamDeck.logger.error("battery-status: restoring the face after a notice failed", err),
+			);
+		}, NOTICE_MS);
 	}
 
 	/**
@@ -154,40 +221,41 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<BatterySettings>): Promise<void> {
 		if (!ev.action.isKey()) return;
 		const settings = ev.payload.settings;
-		const id = ev.action.id;
+		const state = this.state(ev.action.id);
 
-		const deviceChanged = this.appliedDevice.get(id) !== settings.deviceKey;
-		const cached = this.lastReadings.get(id);
-
-		if (cached && !deviceChanged) {
-			await this.render(ev.action, settings, cached.reading, cached.kind);
+		const deviceChanged = state.deviceKey !== settings.deviceKey;
+		if (state.drawn && !deviceChanged) {
+			await this.render(ev.action, settings, state.drawn.reading, state.drawn.kind);
+			state.drawn.settings = settings;
 		} else {
 			await this.refresh(ev.action, settings);
 		}
 
 		// Restarting the timer on every keystroke would keep pushing the next poll
-		// out of reach, so only do it when the interval itself changed.
-		const seconds = this.intervalOf(settings);
-		if (this.appliedInterval.get(id) !== seconds) this.schedule(ev.action, settings);
+		// out of reach, so only do it when the interval or the mode changed.
+		const mode = settings.pollMode ?? DEFAULTS.pollMode;
+		if (state.pollBase !== refreshSeconds(settings) || state.pollMode !== mode) {
+			this.schedule(ev.action, settings);
+		}
 	}
 
 	/**
 	 * Feeds the property inspector's device dropdown. The list is whatever the
-	 * providers can see right now; the refresh button drops the cache first.
+	 * providers can see right now; its refresh button drops the cache first.
 	 */
 	override async onSendToPlugin(ev: SendToPluginEvent<UiMessage, BatterySettings>): Promise<void> {
-		const event = ev.payload?.event;
-		if (event !== "getDevices" && event !== "rescan") return;
+		if (ev.payload?.event === "getApps") {
+			await this.sendApps(ev.action, ev.payload?.isRefresh === true);
+			return;
+		}
+		if (ev.payload?.event !== "getDevices") return;
 
-		const force = event === "rescan" || ev.payload?.isRefresh === true;
+		const force = ev.payload?.isRefresh === true;
 		streamDeck.logger.info(`battery-status: property inspector requested devices (force=${force})`);
 
 		const devices = await discovery.list(force);
 		const settings = await ev.action.getSettings();
-		const items = devices.map((d) => ({
-			label: d.supportsBattery ? d.label : `${d.label} (no battery data)`,
-			value: d.key,
-		}));
+		const items = devices.map((d) => ({ label: pickerLabel(d), value: d.key }));
 
 		// Keep a previously chosen but currently absent device selectable, otherwise
 		// the dropdown would silently clear the user's configuration.
@@ -199,65 +267,76 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 		}
 
 		if (items.length === 0) {
-			items.push({ label: "No devices detected — press Rescan", value: "" });
+			items.push({ label: "No devices detected — press the refresh button", value: "" });
 		}
 
 		await streamDeck.ui.sendToPropertyInspector({ event: "getDevices", items });
 	}
 
 	/**
-	 * Writes the appearance defaults into settings the first time a key is used,
-	 * so the property inspector's controls start out matching what's drawn rather
-	 * than showing empty inputs.
+	 * Feeds the property inspector's app picker with what the Start menu can
+	 * launch, so a key can be pointed at an app without anyone typing a path.
 	 */
+	private async sendApps(action: SendToPluginEvent<UiMessage, BatterySettings>["action"], force: boolean): Promise<void> {
+		const apps = await listApps(force);
+		const items = apps.map((app) => ({ label: app.name, value: app.target }));
+
+		// Leaving the key on "just read the battery" has to be reachable from the
+		// picker itself; there's no separate switch to turn opening off.
+		items.unshift({ label: "Don't open anything", value: "" });
+
+		await streamDeck.ui.sendToPropertyInspector({ event: "getApps", items });
+	}
+
+	private state(actionId: string): KeyState {
+		let state = this.keys.get(actionId);
+		if (!state) {
+			state = { pulsePhase: 0, unchanged: 0 };
+			this.keys.set(actionId, state);
+		}
+		return state;
+	}
+
 	private async ensureDefaults(
 		action: KeyAction<BatterySettings>,
 		settings: BatterySettings,
 	): Promise<BatterySettings> {
-		const version = settings.settingsVersion ?? (settings.configured ? 1 : 0);
-		if (settings.configured && version >= SETTINGS_VERSION) return settings;
-
-		const migrated: BatterySettings = { ...settings };
-
-		// v1 -> v2: charging went from blue to green. Only move keys still on the
-		// old default; a colour the user picked themselves is left alone.
-		if (version < 2 && (migrated.colorCharging === undefined || migrated.colorCharging === LEGACY_CHARGING_COLOR)) {
-			migrated.colorCharging = DEFAULTS.colorCharging;
-		}
-
-		const merged = { ...DEFAULTS, ...migrated, configured: true, settingsVersion: SETTINGS_VERSION };
-		await action.setSettings(merged);
-		return merged;
+		const migrated = migrate(settings);
+		if (!migrated) return settings;
+		await action.setSettings(migrated);
+		return migrated;
 	}
 
-	private intervalOf(settings: BatterySettings): number {
-		return Math.max(MIN_REFRESH_SECONDS, settings.refreshSeconds ?? DEFAULTS.refreshSeconds);
-	}
-
+	/**
+	 * Arms the next poll. Each tick re-arms itself, so an adaptive key can widen
+	 * or narrow its own interval as the reading changes.
+	 */
 	private schedule(action: KeyAction<BatterySettings>, settings: BatterySettings): void {
-		this.clearTimer(action.id);
-		const seconds = this.intervalOf(settings);
+		const state = this.state(action.id);
+		clearTimeout(state.pollTimer);
 
-		const timer = setInterval(() => {
+		state.pollBase = refreshSeconds(settings);
+		state.pollMode = settings.pollMode ?? DEFAULTS.pollMode;
+
+		const seconds = nextPollSeconds(settings, state.drawn?.reading, state.unchanged);
+		streamDeck.logger.debug(`battery-status: next check in ${seconds}s (${state.pollMode}, ${state.unchanged} unchanged)`);
+
+		state.pollTimer = setTimeout(() => {
 			// Read the settings fresh on every tick. Closing over the settings from
 			// when the timer was created would repaint the key with a stale
 			// appearance, silently undoing any edit made since.
 			action
 				.getSettings()
-				.then((current) => this.refresh(action, current))
-				.catch((err) => streamDeck.logger.error("battery-status: scheduled refresh failed", err));
+				.then(async (current) => {
+					await this.refresh(action, current);
+					this.schedule(action, current);
+				})
+				.catch((err) => {
+					streamDeck.logger.error("battery-status: scheduled refresh failed", err);
+					// Keep the chain alive; a failed tick shouldn't stop the key updating.
+					this.schedule(action, settings);
+				});
 		}, seconds * 1000);
-
-		this.timers.set(action.id, timer);
-		this.appliedInterval.set(action.id, seconds);
-	}
-
-	private clearTimer(actionId: string): void {
-		const timer = this.timers.get(actionId);
-		if (timer) {
-			clearInterval(timer);
-			this.timers.delete(actionId);
-		}
 	}
 
 	private async refresh(
@@ -265,11 +344,14 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 		settings: BatterySettings,
 		force = false,
 	): Promise<void> {
-		this.appliedDevice.set(action.id, settings.deviceKey);
+		this.state(action.id).deviceKey = settings.deviceKey;
 
 		try {
 			const device = await this.resolve(action, settings, force);
 			if (!device) {
+				// A device that comes back at a higher level was charged somewhere
+				// else, which isn't the same as charging now.
+				this.state(action.id).rising = false;
 				await this.draw(
 					action,
 					settings,
@@ -286,21 +368,29 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 				return;
 			}
 
-			await this.remember(action, settings, device);
-
 			// discover() already read the battery for most providers; only pay for a
 			// second round-trip when the scan didn't produce one (or it's stale).
-			const reading = !force && device.reading ? device.reading : await this.readDevice(device);
+			const reported = !force && device.reading ? device.reading : await this.readDevice(device);
 
-			await this.draw(action, settings, reading, device.kind);
-			if (reading.status === "error") {
-				streamDeck.logger.warn(`battery-status: ${device.key} error: ${reading.detail}`);
+			// Compared against the stored level, so this has to happen before
+			// `remember` overwrites it with the new one.
+			const live = this.inferCharging(action.id, settings, device, reported);
+
+			// Persist first: a fresh percentage becomes the fallback for the next
+			// time the device is gone, and `remember` may correct the label/kind.
+			const current = await this.remember(action, settings, device, live);
+
+			await this.draw(action, current, live, device.kind);
+			if (live.status === "error") {
+				streamDeck.logger.warn(`battery-status: ${device.key} error: ${live.detail}`);
 			}
 
 			// Alerting belongs to a real reading, not to a repaint — otherwise
 			// dragging the "alert below" slider would flash the key continuously.
-			const alertBelow = settings.alertBelow ?? DEFAULTS.alertBelow;
-			if (alertBelow > 0 && reading.percent !== null && reading.percent < alertBelow) {
+			// A last-known level isn't a reading either: a device left off would
+			// otherwise flash forever at whatever it read before it went away.
+			const alertBelow = current.alertBelow ?? DEFAULTS.alertBelow;
+			if (alertBelow > 0 && live.percent !== null && live.percent < alertBelow) {
 				await action.showAlert();
 			}
 		} catch (err) {
@@ -315,15 +405,100 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 		}
 	}
 
-	/** Renders and remembers the reading, so later edits can repaint it for free. */
+	/**
+	 * Marks a device as charging when its level is going up, for providers that
+	 * can't tell us directly.
+	 *
+	 * A source like the Windows PnP battery property gives a percentage and
+	 * nothing else, so a phone on a charger looks exactly like one in a pocket.
+	 * A level that has risen since the last reading is the one thing that can't
+	 * happen off a charger, so that's the signal; it stays set while the level
+	 * holds (a phone sitting at 100% is still plugged in) and clears the moment
+	 * the level drops.
+	 *
+	 * It is a guess, and it's wrong for a while in one case: unplugging at a level
+	 * the device then holds keeps the bolt until the first drop.
+	 */
+	private inferCharging(
+		actionId: string,
+		settings: BatterySettings,
+		device: DiscoveredDevice,
+		reading: BatteryReading,
+	): BatteryReading {
+		const provider = discovery.provider(device.providerId);
+		if (provider?.reportsCharging !== false) return reading;
+		if (reading.status !== "ok" || reading.percent === null) return reading;
+
+		const state = this.state(actionId);
+		const previous = settings.lastPercent;
+
+		if (previous !== undefined) {
+			if (reading.percent > previous) state.rising = true;
+			else if (reading.percent < previous) state.rising = false;
+		}
+
+		if (!state.rising) return reading;
+		return { ...reading, status: "charging", detail: "Level rising — assumed to be charging" };
+	}
+
+	/**
+	 * Substitutes the last known level when the live reading has no number of its
+	 * own, so a device that's off or out of range shows where it was rather than a
+	 * dash. The result is marked "stale" so the face renders it faded — the level
+	 * is still useful, it just isn't current.
+	 */
+	private withLastKnown(settings: BatterySettings, reading: BatteryReading): BatteryReading {
+		if (reading.percent !== null) return reading;
+		if (!(settings.showLastKnown ?? DEFAULTS.showLastKnown)) return reading;
+		// "unsupported" means the device exposes no battery at all, so there is
+		// nothing it could have been at; leave that case saying so.
+		if (reading.status !== "not-found" && reading.status !== "error") return reading;
+
+		const percent = settings.lastPercent;
+		if (percent === undefined) return reading;
+
+		const age = ageLabel(settings.lastSeenAt);
+		return {
+			...reading,
+			percent,
+			status: "stale",
+			detail: `${reading.detail ?? reading.deviceLabel} — last known ${percent}%${age ? ` (${age} ago)` : ""}`,
+		};
+	}
+
+	/**
+	 * Applies the key's power-source setting. Telling a key its device is always
+	 * plugged in wins over whatever came back: a Bluetooth speaker that reports no
+	 * level is indistinguishable from a headset whose battery can't be read, and
+	 * only the user knows which one is on the desk.
+	 */
+	private forPowerSource(settings: BatterySettings, reading: BatteryReading): BatteryReading {
+		if ((settings.powerSource ?? DEFAULTS.powerSource) !== "mains") return reading;
+		if (reading.status === "mains") return reading;
+		return { deviceLabel: reading.deviceLabel, percent: null, status: "mains", detail: "Always plugged in" };
+	}
+
+	/**
+	 * Renders and remembers the reading, so later edits can repaint it for free.
+	 * What's cached is the live reading, before any last-known substitution — the
+	 * substitution depends on settings, and doing it at render time is what lets
+	 * toggling "last known level" repaint without touching the device.
+	 */
 	private async draw(
 		action: KeyAction<BatterySettings>,
 		settings: BatterySettings,
 		reading: BatteryReading,
 		kind: DeviceKind,
 	): Promise<void> {
-		this.lastReadings.set(action.id, { reading, kind });
-		this.lastSettings.set(action.id, settings);
+		const state = this.state(action.id);
+
+		// Counted before the new reading replaces the old one; adaptive polling
+		// backs off while this keeps climbing.
+		const previous = state.drawn?.reading;
+		const same = previous?.percent === reading.percent && previous?.status === reading.status;
+		state.unchanged = same ? state.unchanged + 1 : 0;
+
+		state.drawn = { reading, kind, settings };
 
 		if (reading.status === "charging") this.startPulse(action);
 		else this.stopPulse(action.id);
@@ -337,34 +512,30 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 	 * re-render off the cached reading, with no device I/O.
 	 */
 	private startPulse(action: KeyAction<BatterySettings>): void {
-		if (this.pulseTimers.has(action.id)) return;
+		const state = this.state(action.id);
+		if (state.pulseTimer) return;
 
-		const timer = setInterval(() => {
-			const cached = this.lastReadings.get(action.id);
-			const settings = this.lastSettings.get(action.id);
-			if (!cached || !settings || cached.reading.status !== "charging") {
+		state.pulseTimer = setInterval(() => {
+			const drawn = state.drawn;
+			if (!drawn || drawn.reading.status !== "charging") {
 				this.stopPulse(action.id);
 				return;
 			}
 
-			const phase = ((this.pulsePhase.get(action.id) ?? 0) + 1) % PULSE_STEPS;
-			this.pulsePhase.set(action.id, phase);
+			state.pulsePhase = (state.pulsePhase + 1) % PULSE_STEPS;
 
-			this.render(action, settings, cached.reading, cached.kind, phase).catch((err) =>
+			this.render(action, drawn.settings, drawn.reading, drawn.kind, state.pulsePhase).catch((err) =>
 				streamDeck.logger.error("battery-status: pulse frame failed", err),
 			);
 		}, PULSE_INTERVAL_MS);
-
-		this.pulseTimers.set(action.id, timer);
 	}
 
 	private stopPulse(actionId: string): void {
-		const timer = this.pulseTimers.get(actionId);
-		if (timer) {
-			clearInterval(timer);
-			this.pulseTimers.delete(actionId);
-		}
-		this.pulsePhase.delete(actionId);
+		const state = this.keys.get(actionId);
+		if (!state?.pulseTimer) return;
+		clearInterval(state.pulseTimer);
+		state.pulseTimer = undefined;
+		state.pulsePhase = 0;
 	}
 
 	/** Maps the stored device key to a currently-detected device. */
@@ -396,19 +567,40 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 		return provider.read(device);
 	}
 
-	/** Caches label/kind in settings so a disconnected device still renders right. */
+	/**
+	 * Caches what a disconnected device still needs to render: its label and kind,
+	 * plus the last percentage it actually reported. Both go out in one write, so
+	 * neither can overwrite the other with a stale copy of the settings.
+	 *
+	 * Returns the settings as they now stand, which the caller draws with.
+	 */
 	private async remember(
 		action: KeyAction<BatterySettings>,
 		settings: BatterySettings,
 		device: DiscoveredDevice,
-	): Promise<void> {
-		if (settings.deviceLabel === device.label && settings.deviceKind === device.kind) return;
-		await action.setSettings({
-			...settings,
-			deviceKey: device.key,
-			deviceLabel: device.label,
-			deviceKind: device.kind,
-		});
+		reading: BatteryReading,
+	): Promise<BatterySettings> {
+		const patch: BatterySettings = {};
+
+		if (settings.deviceLabel !== device.label || settings.deviceKind !== device.kind) {
+			patch.deviceKey = device.key;
+			patch.deviceLabel = device.label;
+			patch.deviceKind = device.kind;
+		}
+
+		if (reading.percent !== null) {
+			const drifted = Date.now() - (settings.lastSeenAt ?? 0) > LAST_SEEN_TOUCH_MS;
+			if (settings.lastPercent !== reading.percent || drifted) {
+				patch.lastPercent = reading.percent;
+				patch.lastSeenAt = Date.now();
+			}
+		}
+
+		if (Object.keys(patch).length === 0) return settings;
+
+		const merged = { ...settings, ...patch };
+		await action.setSettings(merged);
+		return merged;
 	}
 
 	/**
@@ -428,33 +620,42 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 		if (!(settings.showName ?? DEFAULTS.showName)) return "";
 
 		const source = settings.nameSource ?? DEFAULTS.nameSource;
-		const info = this.titles.get(action.id);
+		const info = this.state(action.id).title;
 		// Stream Deck titles can be multi-line; the key face has room for one.
 		const custom = (info?.title ?? "").replace(/\s+/g, " ").trim();
 
+		const device = this.deviceLine(settings, reading);
 		const wantsTitle = source === "title" || (source === "auto" && custom !== "");
-		if (!wantsTitle) return reading.deviceLabel;
-		if (info?.showTitle) return source === "auto" ? reading.deviceLabel : "";
+		if (!wantsTitle) return device;
+		if (info?.showTitle) return source === "auto" ? device : "";
 
 		return custom;
 	}
 
+	/**
+	 * The device's own line: its label, prefixed with how long ago the level was
+	 * read while it's offline. The age goes first because the line is truncated
+	 * from the right, and "how old is this number" is the part worth keeping.
+	 */
+	private deviceLine(settings: BatterySettings, reading: BatteryReading): string {
+		if (reading.status !== "stale") return reading.deviceLabel;
+		const age = ageLabel(settings.lastSeenAt);
+		return age ? `${age} · ${reading.deviceLabel}` : reading.deviceLabel;
+	}
+
+	/** Paints the key from a live reading; `live` is what came off the device. */
 	private async render(
 		action: KeyAction<BatterySettings>,
 		settings: BatterySettings,
-		reading: BatteryReading,
+		live: BatteryReading,
 		kind: DeviceKind,
 		phase = 0,
 	): Promise<void> {
-		const colors: FaceColors = {
-			low: settings.colorLow ?? DEFAULTS.colorLow,
-			medium: settings.colorMedium ?? DEFAULTS.colorMedium,
-			high: settings.colorHigh ?? DEFAULTS.colorHigh,
-			charging: settings.colorCharging ?? DEFAULTS.colorCharging,
-			background: settings.colorBackground ?? DEFAULTS.colorBackground,
-			foreground: settings.colorForeground ?? DEFAULTS.colorForeground,
-		};
+		// A message owns the key while it's up; the reading behind it is still
+		// cached, and gets drawn when the message clears.
+		if (this.state(action.id).showingNotice) return;
 
+		const reading = this.forPowerSource(settings, this.withLastKnown(settings, live));
 		const name = this.nameLine(action, settings, reading);
 
 		await action.setImage(
@@ -469,7 +670,7 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 				showName: name !== "",
 				lowThreshold: settings.lowThreshold ?? DEFAULTS.lowThreshold,
 				mediumThreshold: settings.mediumThreshold ?? DEFAULTS.mediumThreshold,
-				colors,
+				colors: faceColors(settings),
 				// Sine so the breath eases at both ends instead of ramping linearly.
 				pulse: (Math.sin((2 * Math.PI * phase) / PULSE_STEPS) + 1) / 2,
 			}),
@@ -481,7 +682,9 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 		if (titleMode === "device") {
 			await action.setTitle(reading.deviceLabel);
 		} else if (titleMode === "percent") {
-			await action.setTitle(reading.percent === null ? "" : `${reading.percent}%`);
+			// A last-known level gets a "~" so the title doesn't claim to be current.
+			const prefix = reading.status === "stale" ? "~" : "";
+			await action.setTitle(reading.percent === null ? "" : `${prefix}${reading.percent}%`);
 		}
 	}
 }

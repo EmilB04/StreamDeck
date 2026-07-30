@@ -39,15 +39,21 @@ export const DEFAULT_COLORS: FaceColors = {
 	low: "#e35d5d",
 	medium: "#e3b34d",
 	high: "#2ecc71",
-	charging: "#3ddc84",
+	charging: "#55ff7f",
 	background: "#1e2024",
 	foreground: "#eaeaea",
 };
 
-/** The blue this plugin used to ship as the charging colour, kept for migration. */
-export const LEGACY_CHARGING_COLOR = "#3ba7ff";
+/**
+ * Charging colours this plugin has shipped as the default, oldest first: blue,
+ * then a muted green. Kept so a key still sitting on one of them can be moved to
+ * the current default, while a colour the user picked is left alone.
+ */
+export const LEGACY_CHARGING_COLORS = ["#3ba7ff", "#3ddc84"];
 
 const MUTED = "#5a5f66";
+/** How far a last-known ("stale") face is faded relative to a live one. */
+const STALE_OPACITY = 0.45;
 const SIZE = 72;
 const GAP = 4;
 
@@ -93,9 +99,12 @@ function truncateToWidth(text: string, maxWidth: number, fontSize: number): stri
 }
 
 function meterColor(percent: number | null, status: BatteryStatus, options: FaceOptions): string {
+	if (status === "mains") return options.colors.foreground;
 	if (status === "unsupported" || status === "not-found" || status === "error") return MUTED;
 	if (status === "charging") return options.colors.charging;
 	if (percent === null) return MUTED;
+	// "stale" keeps the threshold colour so the level still reads at a glance; it's
+	// the dimming and the offline glyph that say the number isn't live.
 	if (percent <= options.lowThreshold) return options.colors.low;
 	if (percent <= options.mediumThreshold) return options.colors.medium;
 	return options.colors.high;
@@ -106,6 +115,39 @@ function fallbackLabel(status: BatteryStatus): string {
 	if (status === "unsupported") return "N/A";
 	if (status === "error") return "ERR";
 	return "—"; // not-found / offline
+}
+
+/**
+ * Mains plug, drawn in place of the meter and the percentage for a device that
+ * runs off the cable. A power symbol would read as "on/off"; a plug says where
+ * the energy comes from, which is the actual answer.
+ */
+const PLUG_HEIGHT = 26;
+
+function plugGlyph(y: number, color: string): string {
+	const cx = SIZE / 2;
+	return `<g transform="translate(${cx} ${(y + PLUG_HEIGHT / 2).toFixed(2)})" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+		<path d="M-7 -13 v6"/>
+		<path d="M7 -13 v6"/>
+		<path d="M-11 -7 h22 v4 a11 11 0 0 1 -22 0 z"/>
+		<path d="M0 4 v9"/>
+	</g>`;
+}
+
+/** Greedy wrap: fills each line with as many whole words as fit. */
+function wrapWords(words: string[], maxChars: number): string[] {
+	const lines: string[] = [];
+
+	for (const word of words) {
+		const current = lines[lines.length - 1];
+		if (current !== undefined && current.length + 1 + word.length <= maxChars) {
+			lines[lines.length - 1] = `${current} ${word}`;
+		} else {
+			lines.push(word);
+		}
+	}
+
+	return lines;
 }
 
 function escapeXml(value: string): string {
@@ -157,6 +199,19 @@ function deviceIcon(kind: DeviceKind, color: string): string {
 	}
 }
 
+/**
+ * Corner marker for a last-known reading: a struck-through circle, in the top
+ * left where nothing else in the stack is drawn (the charging bolt owns the top
+ * right). Kept at full opacity while the face behind it is faded, so "this is
+ * not live" stays legible.
+ */
+function offlineGlyph(color: string): string {
+	return `<g fill="none" stroke="${color}" stroke-opacity="0.6" stroke-width="2" stroke-linecap="round">
+		<circle cx="11" cy="11" r="5.5"/>
+		<line x1="7.1" y1="14.9" x2="14.9" y2="7.1"/>
+	</g>`;
+}
+
 /** Horizontal battery outline with a proportional fill. */
 function barMeter(
 	y: number,
@@ -200,6 +255,50 @@ function ringMeter(percent: number | null, color: string, options: FaceOptions, 
 type Block = { height: number; render: (y: number) => string };
 
 /**
+ * A short message on the key, for something the user needs told right now — a
+ * press on a device that isn't there. Stream Deck has no toast or tooltip a
+ * plugin can raise, so the key itself has to carry the words; the caller puts
+ * the normal face back afterwards.
+ *
+ * The text is sized so its longest word fits the key, then wrapped greedily at
+ * that size — at 72px that's a dozen characters a line.
+ */
+export function noticeKeyImage(message: string, colors: FaceColors): string {
+	const words = message.split(/\s+/).filter(Boolean);
+	const longest = words.reduce((max, word) => Math.max(max, word.length), 1);
+	const fontSize = Math.max(8, Math.min(13, FLAT_INNER_WIDTH / (CHAR_WIDTH_RATIO * longest)));
+	const lines = wrapWords(words, Math.floor(FLAT_INNER_WIDTH / (CHAR_WIDTH_RATIO * fontSize)));
+
+	const lineHeight = fontSize * 1.25;
+	const triangle = 15;
+	const gap = 5;
+	const total = triangle + gap + lines.length * lineHeight;
+	let cursor = (SIZE - total) / 2;
+
+	const warning = `<g transform="translate(${SIZE / 2} ${(cursor + triangle / 2).toFixed(2)})">
+		<path d="M0 -8 L9 8 H-9 Z" fill="none" stroke="${colors.medium}" stroke-width="2.5" stroke-linejoin="round"/>
+		<line x1="0" y1="-3" x2="0" y2="3" stroke="${colors.medium}" stroke-width="2.5" stroke-linecap="round"/>
+		<circle cx="0" cy="6" r="1.2" fill="${colors.medium}"/>
+	</g>`;
+
+	cursor += triangle + gap;
+	const text = lines
+		.map((line, i) => {
+			const y = cursor + (i + 1) * lineHeight - lineHeight * 0.3;
+			return `<text x="${SIZE / 2}" y="${y.toFixed(2)}" text-anchor="middle" font-family="${FONT}" font-size="${fontSize.toFixed(1)}" font-weight="600" fill="${colors.foreground}">${escapeXml(line)}</text>`;
+		})
+		.join("");
+
+	const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
+		<rect width="${SIZE}" height="${SIZE}" fill="${colors.background}"/>
+		${warning}
+		${text}
+	</svg>`;
+
+	return `data:image/svg+xml;charset=utf8,${encodeURIComponent(svg)}`;
+}
+
+/**
  * Renders the key face as an SVG data URI, which is what setImage expects — a
  * bare <svg> string is silently ignored by Stream Deck and the key keeps its
  * manifest image.
@@ -232,12 +331,20 @@ export function batteryKeyImage(options: FaceOptions): string {
 		});
 	}
 
-	if (style === "bar") {
+	// A mains device has no level to draw, so the plug takes the place of both the
+	// meter and the percentage rather than sitting alongside an empty one.
+	const isMains = status === "mains";
+
+	if (isMains) {
+		blocks.push({ height: PLUG_HEIGHT, render: (y) => plugGlyph(y, color) });
+	}
+
+	if (style === "bar" && !isMains) {
 		const height = 16;
 		blocks.push({ height, render: (y) => barMeter(y, height, percent, color, options, opacity) });
 	}
 
-	if (options.showPercent) {
+	if (options.showPercent && !isMains) {
 		// Size from the worst case ("100%") rather than the current value, so the
 		// layout doesn't jump when the reading crosses 100 or drops to a dash.
 		const maxFont = style === "text" ? 30 : 18;
@@ -293,16 +400,24 @@ export function batteryKeyImage(options: FaceOptions): string {
 
 	const ring = isRing ? ringMeter(percent, color, options, opacity) : "";
 
+	// A last-known reading is faded as a whole — outline and icon included — so it
+	// can't be mistaken for a live one, and marked with a "disconnected" glyph.
+	const face =
+		status === "stale"
+			? `<g opacity="${STALE_OPACITY}">${ring}${scaledStack}</g>${offlineGlyph(colors.foreground)}`
+			: `${ring}${scaledStack}`;
+
 	// The bolt marks charging even when the colour is close to the "high" colour.
+	// Top left, the same corner the offline glyph uses — a device can't be both
+	// charging and gone, so they never collide.
 	const bolt =
 		status === "charging"
-			? `<path d="M62 6 l-7 12 h5 l-4 10 11 -14 h-5 z" fill="${colors.charging}" fill-opacity="${opacity}" stroke="${colors.background}" stroke-width="1"/>`
+			? `<path d="M12 6 l-7 12 h5 l-4 10 11 -14 h-5 z" fill="${colors.charging}" fill-opacity="${opacity}" stroke="${colors.background}" stroke-width="1"/>`
 			: "";
 
 	const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
 		<rect width="${SIZE}" height="${SIZE}" fill="${colors.background}"/>
-		${ring}
-		${scaledStack}
+		${face}
 		${bolt}
 	</svg>`;
 
