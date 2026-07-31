@@ -33,6 +33,27 @@
 		></sdpi-select>
 	</sdpi-item>
 
+	<sdpi-item label="Nickname">
+		<sdpi-textfield setting="displayName" placeholder="Leave empty to use its own name"></sdpi-textfield>
+	</sdpi-item>
+
+	<sdpi-item label="Icon">
+		<sdpi-select setting="iconKind" default="auto">
+			<option value="auto">Auto</option>
+			<option value="headset">Headset</option>
+			<option value="earbuds">Earbuds</option>
+			<option value="mouse">Mouse</option>
+			<option value="keyboard">Keyboard</option>
+			<option value="gamepad">Controller</option>
+			<option value="microphone">Microphone</option>
+			<option value="speaker">Speaker</option>
+			<option value="phone">Phone</option>
+			<option value="tablet">Tablet</option>
+			<option value="watch">Watch</option>
+			<option value="other">Something else</option>
+		</sdpi-select>
+	</sdpi-item>
+
 	<sdpi-item label="Power">
 		<sdpi-select setting="powerSource" default="auto">
 			<option value="auto">Battery, if it reports one</option>
@@ -108,29 +129,24 @@
 		<sdpi-checkbox setting="showPercent" default="true" label="Percentage"></sdpi-checkbox>
 		<sdpi-checkbox setting="showName" default="true" label="Name line"></sdpi-checkbox>
 		<sdpi-checkbox setting="showLastKnown" default="true" label="Last level when off"></sdpi-checkbox>
-	</sdpi-item>
-
-	<sdpi-item label="Name line">
-		<sdpi-select setting="nameSource" default="auto">
-			<option value="auto">My title, else device name</option>
-			<option value="device">Device name</option>
-			<option value="title">My title</option>
-		</sdpi-select>
+		<sdpi-checkbox setting="showTimeLeft" label="Time left instead of name"></sdpi-checkbox>
 	</sdpi-item>
 
 	<sdpi-item label="Deck title">
 		<sdpi-select setting="titleMode" default="none">
-			<option value="none">Leave my title alone</option>
-			<option value="device">Device name</option>
+			<option value="none">Nothing</option>
+			<option value="device">Nickname</option>
 			<option value="percent">Percentage</option>
 		</sdpi-select>
 	</sdpi-item>
 
 	<details class="more">
-	<summary>About titles and offline keys</summary>
+	<summary>About names and offline keys</summary>
 	<div>
-		<p>Stream Deck paints its own title over the plugin's image and won't let a plugin clear a title you typed. So <b>Deck title</b> only takes effect on a key with an empty Title field, and the <b>name line</b> can show your title only once you hide Stream Deck's with the "T" toggle beside it — until then it falls back to the device name rather than printing the same words twice.</p>
+		<p>Stream Deck's own Title field is switched off for this action, so <b>Nickname</b> is the only place a key is named. <b>Deck title</b> writes Stream Deck's title over the image as well, in its font rather than the key's — set it to <b>Nickname</b> and it follows the name above, falling back to the device's own when that's empty.</p>
 		<p><b>Last level when off</b> keeps showing what a disconnected device last reported, faded and marked with a crossed-out circle, with its age on the name line. Turn it off for a dash instead.</p>
+		<p><b>Time left</b> puts an estimate on the name line instead of the device name — there's room for one of them.</p>
+		<p>It reads <b>measuring…</b> until the device has actually dropped 3% over at least ten minutes: a rate needs a real fall to measure, and a device that reports in 10% steps can take a while to produce one. It goes back to measuring after a charge, since a discharge rate can't be read across one.</p>
 	</div>
 	</details>
 
@@ -179,6 +195,12 @@
 			<label><sdpi-color setting="colorBackground" default="#000000"></sdpi-color>Background</label>
 		</div>
 	</sdpi-item>
+
+	<sdpi-item label="">
+		<sdpi-button id="share-appearance">Apply this look to all keys</sdpi-button>
+	</sdpi-item>
+
+	<span class="hint">Copies the colours, thresholds and what's drawn to every other Battery Monitor key. Each key keeps its own device.</span>
 
 	<div class="section">Headset support</div>
 
@@ -334,6 +356,11 @@
 				toolPath.textContent = `Installed — headsets report their level. Using ${binary}.`;
 			}
 		});
+
+		// One key's look, copied onto every other Battery Monitor key.
+		document
+			.getElementById("share-appearance")
+			.addEventListener("click", () => send({ event: "shareAppearance" }));
 
 		for (const button of document.querySelectorAll(".get-headsetcontrol")) {
 			button.addEventListener("click", () => send({ event: "openHeadsetTool" }));

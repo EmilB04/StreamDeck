@@ -12,10 +12,22 @@ import { discovery } from "../providers/discovery";
 import { findHeadsetControl, HEADSETCONTROL_RELEASES } from "../providers/headsetcontrol";
 import type { BatteryReading, DeviceKind, DiscoveredDevice } from "../providers/types";
 import { batteryKeyImage, noticeKeyImage } from "../ui/battery-svg";
+import { applyAppearance, shareAppearance, sharedAppearance } from "./appearance";
 import { listApps } from "./apps";
 import { openTarget } from "./launch";
 import type { BatterySettings, PollMode } from "./settings";
-import { DEFAULTS, faceColors, migrate, nextPollSeconds, refreshSeconds } from "./settings";
+import {
+	DEFAULTS,
+	estimateRemaining,
+	extractAppearance,
+	faceColors,
+	formatDuration,
+	migrate,
+	nextPollSeconds,
+	recordSample,
+	refreshSeconds,
+} from "./settings";
+import type { Appearance } from "./settings";
 
 /** Messages from the property inspector; `isRefresh` comes from its refresh button. */
 type UiMessage = { event?: string; isRefresh?: boolean };
@@ -53,6 +65,11 @@ type KeyState = {
 	/** Consecutive readings that said the same thing; drives the adaptive backoff. */
 	unchanged: number;
 	/**
+	 * Whether the warning has already fired for this trip below the threshold.
+	 * Without it a key under the threshold alerts on every single poll.
+	 */
+	alerted?: boolean;
+	/**
 	 * Whether the level was last seen rising. The only charging signal available
 	 * for a device whose provider can't report one (see inferCharging).
 	 */
@@ -65,8 +82,6 @@ type KeyState = {
 	 * colour edit or a pulse frame without touching the device.
 	 */
 	drawn?: { reading: BatteryReading; kind: DeviceKind; settings: BatterySettings };
-	/** The user's own title, and whether Stream Deck is drawing it itself. */
-	title?: { title: string; showTitle: boolean };
 	/** Device the key was last refreshed for, to spot a changed one. */
 	deviceKey?: string;
 	/** A message is on the key; painting the face is suspended until it clears. */
@@ -150,26 +165,6 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 		clearInterval(state.pulseTimer);
 		clearTimeout(state.noticeTimer);
 		this.keys.delete(ev.action.id);
-	}
-
-	/**
-	 * Tracks the user's own title so it can be drawn in the key's own style, and
-	 * repaints when it changes.
-	 */
-	override async onTitleParametersDidChange(ev: TitleParametersDidChangeEvent<BatterySettings>): Promise<void> {
-		if (!ev.action.isKey()) return;
-
-		const state = this.state(ev.action.id);
-		const next = { title: ev.payload.title ?? "", showTitle: ev.payload.titleParameters.showTitle };
-		const previous = state.title;
-		state.title = next;
-
-		// Setting the title ourselves (titleMode) echoes back through this event;
-		// only repaint on a real change so that can't turn into a loop.
-		if (previous?.title === next.title && previous?.showTitle === next.showTitle) return;
-
-		const drawn = state.drawn;
-		if (drawn) await this.render(ev.action, ev.payload.settings, drawn.reading, drawn.kind);
 	}
 
 	/**
@@ -292,6 +287,10 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 			await streamDeck.ui.sendToPropertyInspector({ event: "getHeadsetTool", installed: binary !== null, binary });
 			return;
 		}
+		if (ev.payload?.event === "shareAppearance") {
+			await this.shareAppearance(ev.action.id);
+			return;
+		}
 		if (ev.payload?.event === "openHeadsetTool") {
 			// Stream Deck opens it in the real browser; the inspector is a webview
 			// with no place to put a page.
@@ -324,6 +323,26 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 	}
 
 	/**
+	 * Publishes this key's look to every other key, through global settings.
+	 *
+	 * Colours and thresholds are the settings people want identical across a
+	 * deskful of keys and hate setting six times. They stay per-key so one key
+	 * can still be odd on purpose; this is a deliberate push, not a binding.
+	 */
+	private async shareAppearance(actionId: string): Promise<void> {
+		const source = this.keys.get(actionId)?.drawn?.settings;
+		if (!source) return;
+
+		await shareAppearance(extractAppearance(source));
+		streamDeck.logger.info("battery-status: appearance shared with every key");
+	}
+
+	/** Adopts a shared look. Called for every key when global settings change. */
+	async applyShared(appearance: Appearance): Promise<void> {
+		await applyAppearance(this.actions, appearance);
+	}
+
+	/**
 	 * Tells the property inspector what the key is currently showing, so the panel
 	 * opens with an answer rather than only questions.
 	 *
@@ -343,7 +362,7 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 		await streamDeck.ui.sendToPropertyInspector({
 			event: "getStatus",
 			status: {
-				label: reading.deviceLabel,
+				label: this.labelFor(settings, reading),
 				percent: reading.percent,
 				state: statusWording(reading),
 				tone: statusTone(reading.status),
@@ -381,8 +400,14 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 	): Promise<BatterySettings> {
 		const migrated = migrate(settings);
 		if (!migrated) return settings;
-		await action.setSettings(migrated);
-		return migrated;
+
+		// A key dropped onto a deck that already has a shared look should match it
+		// rather than arrive in the shipped defaults and need setting up again.
+		const shared = settings.configured ? undefined : await sharedAppearance();
+		const merged = { ...migrated, ...(shared ?? {}) };
+
+		await action.setSettings(merged);
+		return merged;
 	}
 
 	/**
@@ -467,10 +492,7 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 			// dragging the "alert below" slider would flash the key continuously.
 			// A last-known level isn't a reading either: a device left off would
 			// otherwise flash forever at whatever it read before it went away.
-			const alertBelow = current.alertBelow ?? DEFAULTS.alertBelow;
-			if (alertBelow > 0 && live.percent !== null && live.percent < alertBelow) {
-				await action.showAlert();
-			}
+			await this.warnOnCrossing(action, current, live);
 		} catch (err) {
 			streamDeck.logger.error("battery-status: refresh threw", err);
 			await this.draw(
@@ -481,6 +503,36 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 			);
 			await action.showAlert();
 		}
+	}
+
+	/**
+	 * Flashes the warning when the level crosses below the threshold — once per
+	 * trip, not once per poll.
+	 *
+	 * The old behaviour fired on every reading under the threshold, which at a
+	 * 10s interval is six flashes a minute for as long as the device stays low:
+	 * enough to make people turn the warning off entirely, which costs them the
+	 * one alert that mattered. The latch clears when the level recovers or the
+	 * device goes on charge, so the next real crossing warns again.
+	 */
+	private async warnOnCrossing(
+		action: KeyAction<BatterySettings>,
+		settings: BatterySettings,
+		reading: BatteryReading,
+	): Promise<void> {
+		const alertBelow = settings.alertBelow ?? DEFAULTS.alertBelow;
+		const state = this.state(action.id);
+
+		if (alertBelow <= 0 || reading.percent === null) return;
+
+		if (reading.percent >= alertBelow || reading.status === "charging") {
+			state.alerted = false;
+			return;
+		}
+
+		if (state.alerted) return;
+		state.alerted = true;
+		await action.showAlert();
 	}
 
 	/**
@@ -672,6 +724,12 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 				patch.lastPercent = reading.percent;
 				patch.lastSeenAt = Date.now();
 			}
+
+			// Only a changed level is worth a sample; repeats say nothing about
+			// the rate and would just push real history out of the window.
+			if (settings.lastPercent !== reading.percent) {
+				patch.history = recordSample(settings.history, reading.percent, Date.now());
+			}
 		}
 
 		if (Object.keys(patch).length === 0) return settings;
@@ -684,53 +742,49 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 	/**
 	 * Text for the small line under the meter — empty when there shouldn't be one.
 	 *
-	 * Stream Deck composites its own title over our image and refuses to let a
-	 * plugin clear a title the user typed, so the plugin can only draw the title
-	 * itself when the user has hidden Stream Deck's ("T" toggle above the Title
-	 * field). While Stream Deck is still drawing it, "auto" falls back to the
-	 * device name rather than showing the same text twice.
+	 * There's no longer a user-typed title to defer to: the actions set
+	 * `UserTitleEnabled: false`, so Stream Deck hides its Title field and
+	 * "Nickname" is the single place a key is named.
 	 */
-	private nameLine(
-		action: KeyAction<BatterySettings>,
-		settings: BatterySettings,
-		reading: BatteryReading,
-	): string {
+	private nameLine(settings: BatterySettings, reading: BatteryReading): string {
 		if (!(settings.showName ?? DEFAULTS.showName)) return "";
+		return this.deviceLine(settings, reading);
+	}
 
-		const source = settings.nameSource ?? DEFAULTS.nameSource;
-		const state = this.state(action.id);
-		const info = state.title;
-
-		// A title this plugin wrote is not a title the user chose. Without this,
-		// "device name" or "percentage" mode would echo back through
-		// titleParametersDidChange and read as a custom title, suppressing the
-		// name line the user actually asked for.
-		const raw = info?.title === state.titleApplied?.value ? "" : (info?.title ?? "");
-		// Stream Deck titles can be multi-line; the key face has room for one.
-		const custom = raw.replace(/\s+/g, " ").trim();
-
-		const device = this.deviceLine(settings, reading);
-		const wantsTitle = source === "title" || (source === "auto" && custom !== "");
-		if (!wantsTitle) return device;
-
-		// A title the user typed replaces the device name rather than joining it.
-		// While Stream Deck is drawing that title itself, the key already carries
-		// the words, so the plugin draws no line at all instead of printing the
-		// device name underneath and having the key say two different things.
-		if (info?.showTitle) return "";
-
-		return custom;
+	/**
+	 * What to call the device. A name typed here wins over the one it reports —
+	 * Windows names one phone on the dev machine "4", and no amount of probing
+	 * improves on a name the owner chose.
+	 */
+	private labelFor(settings: BatterySettings, reading: BatteryReading): string {
+		return settings.displayName?.trim() || reading.deviceLabel;
 	}
 
 	/**
 	 * The device's own line: its label, prefixed with how long ago the level was
 	 * read while it's offline. The age goes first because the line is truncated
 	 * from the right, and "how old is this number" is the part worth keeping.
+	 *
+	 * With "time left" on, the estimate takes the line instead: on a 72px key
+	 * there's room for one of the two, and "2h 40m" is the more useful of them
+	 * once you already know which key is which.
 	 */
 	private deviceLine(settings: BatterySettings, reading: BatteryReading): string {
-		if (reading.status !== "stale") return reading.deviceLabel;
+		const label = this.labelFor(settings, reading);
+
+		if (settings.showTimeLeft && reading.status === "ok" && reading.percent !== null) {
+			const remaining = estimateRemaining(settings.history, reading.percent, Date.now());
+			if (remaining !== null) return formatDuration(remaining);
+
+			// Say so rather than quietly falling back to the device name: an
+			// estimate needs a real fall over a real interval, and a key that
+			// looks unchanged is indistinguishable from a setting that did nothing.
+			return "measuring…";
+		}
+
+		if (reading.status !== "stale") return label;
 		const age = ageLabel(settings.lastSeenAt);
-		return age ? `${age} · ${reading.deviceLabel}` : reading.deviceLabel;
+		return age ? `${age} · ${label}` : label;
 	}
 
 	/** Paints the key from a live reading; `live` is what came off the device. */
@@ -746,13 +800,17 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 		if (this.state(action.id).showingNotice) return;
 
 		const reading = this.forPowerSource(settings, this.withLastKnown(settings, live));
-		const name = this.nameLine(action, settings, reading);
+		const name = this.nameLine(settings, reading);
+
+		// "auto" believes the provider; anything else is the user saying they know
+		// better, which for a device the OS calls "Bluetooth device" they do.
+		const drawnKind = settings.iconKind && settings.iconKind !== "auto" ? settings.iconKind : kind;
 
 		await action.setImage(
 			batteryKeyImage({
 				percent: reading.percent,
 				status: reading.status,
-				kind,
+				kind: drawnKind,
 				name,
 				style: settings.style ?? DEFAULTS.style,
 				showIcon: settings.showIcon ?? DEFAULTS.showIcon,
@@ -792,7 +850,7 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 
 		let wanted: string | undefined;
 		if (mode === "device") {
-			wanted = reading.deviceLabel;
+			wanted = this.labelFor(settings, reading);
 		} else if (mode === "percent") {
 			// A last-known level gets a "~" so the title doesn't claim to be current.
 			const prefix = reading.status === "stale" ? "~" : "";

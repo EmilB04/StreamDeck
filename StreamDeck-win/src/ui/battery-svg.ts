@@ -28,6 +28,12 @@ export type FaceOptions = {
 	mediumThreshold: number;
 	colors: FaceColors;
 	/**
+	 * Marks the face as "the emptiest of several" rather than one device's own
+	 * reading — the two look identical otherwise, and a key that means something
+	 * different should say so.
+	 */
+	lowest?: boolean;
+	/**
 	 * Charging animation phase, 0..1. Stream Deck rasterises SVG statically, so
 	 * SMIL/CSS animation does nothing — movement has to come from the plugin
 	 * re-rendering with a new phase. Ignored unless the status is "charging".
@@ -239,13 +245,38 @@ function deviceGlyph(kind: DeviceKind, color: string): string {
 }
 
 /**
+ * Marks the "lowest of several" face: a chevron pointing at the bottom of the
+ * pile, in the top left where this plugin keeps its corner markers — the same
+ * spot as the charging bolt and the offline glyph.
+ *
+ * That shared corner is why it yields to the bolt while charging: one marker at
+ * a time keeps the corner readable, and a charging device is on its way out of
+ * being the problem anyway. The frame still marks a genuinely low one.
+ */
+function lowestGlyph(color: string, background: string, opacity: number): string {
+	// A filled disc first: the chevron sits over the meter, and a bare stroke on
+	// top of a coloured bar is hard to pick out. The disc is the key's own
+	// background, so it reads as a hole punched in the face rather than a sticker.
+	// Tucked into the corner: in "percentage only" style the number runs wide
+	// enough that a disc centred any lower would cover the first digit.
+	return `<circle cx="11" cy="11" r="10.2" fill="${background}" fill-opacity="${opacity}"/>
+	<g fill="none" stroke="${color}" stroke-opacity="${opacity}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+		<path d="M11 6 v9.4"/>
+		<path d="M6.8 11.4 L11 15.8 L15.2 11.4"/>
+	</g>`;
+}
+
+/**
  * Corner marker for a last-known reading: a struck-through circle, in the top
  * left where nothing else in the stack is drawn (the charging bolt owns the top
  * right). Kept at full opacity while the face behind it is faded, so "this is
  * not live" stays legible.
  */
-function offlineGlyph(color: string): string {
-	return `<g fill="none" stroke="${color}" stroke-opacity="0.6" stroke-width="2" stroke-linecap="round">
+function offlineGlyph(color: string, background: string): string {
+	// Same disc as the "lowest" chevron: both are corner markers sitting over the
+	// meter, and both need separating from it to be read at a glance.
+	return `<circle cx="11" cy="11" r="10.2" fill="${background}"/>
+	<g fill="none" stroke="${color}" stroke-opacity="0.75" stroke-width="2" stroke-linecap="round">
 		<circle cx="11" cy="11" r="5.5"/>
 		<line x1="7.1" y1="14.9" x2="14.9" y2="7.1"/>
 	</g>`;
@@ -446,8 +477,21 @@ export function batteryKeyImage(options: FaceOptions): string {
 	// can't be mistaken for a live one, and marked with a "disconnected" glyph.
 	const face =
 		status === "stale"
-			? `<g opacity="${STALE_OPACITY}">${ring}${scaledStack}</g>${offlineGlyph(colors.foreground)}`
+			? `<g opacity="${STALE_OPACITY}">${ring}${scaledStack}</g>${offlineGlyph(colors.foreground, colors.background)}`
 			: `${ring}${scaledStack}`;
+
+	// A frame in the meter's colour turns the whole key into the warning when the
+	// lowest device is actually low, rather than leaving a small number to be
+	// noticed among five healthy keys.
+	const frame =
+		options.lowest && percent !== null && percent <= options.lowThreshold
+			? `<rect x="1.5" y="1.5" width="${SIZE - 3}" height="${SIZE - 3}" rx="7" fill="none" stroke="${color}" stroke-width="3"/>`
+			: "";
+
+	const lowestMark =
+		options.lowest && status !== "not-found" && status !== "charging"
+			? lowestGlyph(color, colors.background, opacity)
+			: "";
 
 	// The bolt marks charging even when the colour is close to the "high" colour.
 	// Top left, the same corner the offline glyph uses — a device can't be both
@@ -460,6 +504,8 @@ export function batteryKeyImage(options: FaceOptions): string {
 	const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
 		<rect width="${SIZE}" height="${SIZE}" fill="${colors.background}"/>
 		${face}
+		${frame}
+		${lowestMark}
 		${bolt}
 	</svg>`;
 

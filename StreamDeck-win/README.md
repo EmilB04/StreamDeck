@@ -133,6 +133,16 @@ key. Five keys each showing a healthy number don't answer "is anything about to
 die on me"; this one does. It reads nothing itself: discovery has already
 collected every level, so it only chooses between readings that exist.
 
+The face says which kind of key it is. A chevron in the top left — where this
+plugin keeps its corner markers, alongside the charging bolt and the offline
+glyph — marks it as "the emptiest of several" rather than one device's own
+reading, since the two would otherwise be indistinguishable. Sharing that corner
+means it yields to the bolt while charging: one marker at a time stays readable,
+and a device on the charger is on its way out of being the problem. It takes the meter's colour, and once the device it found is
+at or below the low threshold the whole key gains a frame in that colour: a
+single low number among five healthy keys is easy to miss, a red-framed key
+isn't.
+
 Only live readings are eligible — a device that's off can't win with the level
 it had yesterday, and a mains-powered one has nothing to compare. **Peripherals
 only** (the default) leaves out phones, tablets and watches, which have their
@@ -151,18 +161,20 @@ under every control.
 | Setting | Options | Default |
 |---|---|---|
 | Device | whatever discovery found; the refresh button beside it rescans | first battery-capable device |
+| Nickname | a name of your own, replacing the one the device reports | its own name |
+| Icon | which form factor to draw, or work it out | work it out |
 | Power source | work it out automatically, or "always plugged in" to force the plug symbol | automatic |
 | Check battery every | 10–300 seconds | 60 |
 | Timing | always use that interval, or adapt to what the battery is doing | always use it |
 | When pressed | check the battery, or check it and open an app/file/URL | check the battery |
 | If device is off | show its last known level, or a dash | show last known |
 | Meter style | Battery bar / Ring around the key / Percentage only | Battery bar |
-| Draw on the key | device icon, percentage, name line, last level when off | percentage + name line |
+| Draw on the key | device icon, percentage, name line, last level when off, time left | percentage + name line |
 | Name line text | my title if set, else device name / device name / my title | my title if set |
 | Stream Deck title | leave my title alone / device name / percentage | leave alone |
 | Low colour up to | 0–50% | 20 |
 | Medium colour up to | 10–90% — above it, the high colour | 50 |
-| Flash warning below | 0 disables; above 0 flashes Stream Deck's warning icon while a live reading is under it | 0 |
+| Flash warning below | 0 disables; above 0 flashes Stream Deck's warning icon once when the level crosses under it | 0 |
 | Colours | low, medium, high, charging, icon & outline, background | see below |
 
 Defaults: low `#e35d5d`, medium `#e3b34d`, high `#2ecc71`, charging `#55ff7f`,
@@ -262,6 +274,37 @@ and gets drawn when the message clears. A scan that *discovers* the device is
 gone still raises the warning at that point, which is the earliest it can be
 known.
 
+### Time remaining
+
+With **time left** on, the name line carries an estimate ("2h 20m") instead of
+the device name — at 72px there's room for one of them, and once you know which
+key is which, the estimate is the more useful.
+
+The rate comes from a short history of levels kept in the key's settings
+(`recordSample`, `estimateRemaining`). The oldest and newest samples give it: a
+median of intervals would resist an odd reading better, but wireless gauges move
+in 10% steps, so over a handful of samples the endpoints *are* the trend and
+anything cleverer is fitting noise.
+
+Nothing is shown until there's evidence — at least a 3% drop over at least ten
+minutes — so a fresh key stays quiet rather than guessing. A level that goes up
+throws the history away: a device that has been on a charger has no useful
+discharge behind it, and averaging across the charge would report nonsense.
+Verified against synthetic histories: a 5%/h drain at 70% reports 14h, a coarse
+10%-step device reports 16h, and thin evidence reports nothing.
+
+### One look across every key
+
+**Apply this look to all keys** copies the colours, thresholds and what's drawn
+onto every other Battery Monitor key, of either action. It writes the appearance
+to global settings; `plugin.ts` subscribes once and pushes it into each visible
+key, so both action types adopt it through the same path rather than each
+button knowing about every action. A key added later starts from the shared look
+instead of the shipped defaults.
+
+They remain ordinary per-key settings afterwards — this is a deliberate push,
+not a binding, so one key can still be odd on purpose.
+
 ### Offline devices
 
 A wireless device that is switched off or out of range simply stops being
@@ -274,14 +317,22 @@ device is gone:
 - the whole face is drawn at 45% opacity, so it can't be mistaken for a live
   reading, while the meter keeps its threshold colour so the level still reads
   at a glance;
-- a crossed-out circle in the top left marks it as not live;
+- a crossed-out circle in the top left marks it as not live, on a disc of the
+  key's background colour — the same corner treatment as the lowest-battery
+  chevron, so a marker sitting over the meter stays readable;
 - the name line, if it's on, is prefixed with the age of that reading (`3h ·
   Kraken V3`) — the age goes first because the line truncates from the right;
 - the "percentage" key title gets a `~` prefix (`~78%`).
 
 The stored level is only written when the percentage changes (or its timestamp
 has drifted more than 10 minutes), so an idle key isn't writing settings every
-poll. "Flash warning below" deliberately ignores a last-known level — otherwise a device
+poll. The warning fires **once per trip** below the threshold, not once per
+reading: the old behaviour flashed on every poll, which at a 10s interval is six
+flashes a minute for as long as the device stays low — enough to make anyone
+turn the warning off entirely, costing them the one alert that mattered. The
+latch clears when the level recovers or the device goes on charge.
+
+"Flash warning below" deliberately ignores a last-known level — otherwise a device
 left switched off below the threshold would flash forever. A device that exposes
 no battery at all still shows `N/A`, since there is no earlier level it could
 fall back to.

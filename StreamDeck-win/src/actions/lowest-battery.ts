@@ -7,12 +7,22 @@ import type {
 	WillAppearEvent,
 	WillDisappearEvent,
 } from "@elgato/streamdeck";
+import { applyAppearance, shareAppearance, sharedAppearance } from "./appearance";
 import { listApps } from "./apps";
 import { discovery } from "../providers/discovery";
 import type { BatteryReading, DeviceKind, DiscoveredDevice } from "../providers/types";
 import { batteryKeyImage } from "../ui/battery-svg";
 import type { LowestBatterySettings } from "./settings";
-import { DEFAULTS, faceColors, migrate, nextPollSeconds, refreshSeconds, watchIncludes } from "./settings";
+import {
+	DEFAULTS,
+	extractAppearance,
+	faceColors,
+	migrate,
+	nextPollSeconds,
+	refreshSeconds,
+	watchIncludes,
+} from "./settings";
+import type { Appearance } from "./settings";
 import { openTarget } from "./launch";
 
 /** Messages from the property inspector; `isRefresh` comes from its refresh button. */
@@ -27,6 +37,8 @@ type KeyState = {
 	pollBase?: number;
 	pollMode?: string;
 	unchanged: number;
+	/** Whether the warning already fired for this trip below the threshold. */
+	alerted?: boolean;
 	pulseTimer?: NodeJS.Timeout;
 	pulsePhase: number;
 	drawn?: { reading: BatteryReading; kind: DeviceKind; settings: LowestBatterySettings };
@@ -106,6 +118,12 @@ export class LowestBatteryAction extends SingletonAction<LowestBatterySettings> 
 			return;
 		}
 
+		if (ev.payload?.event === "shareAppearance") {
+			const source = this.keys.get(ev.action.id)?.drawn?.settings;
+			if (source) await shareAppearance(extractAppearance(source));
+			return;
+		}
+
 		if (ev.payload?.event === "getStatus") {
 			const drawn = this.keys.get(ev.action.id)?.drawn;
 			await streamDeck.ui.sendToPropertyInspector({
@@ -120,6 +138,11 @@ export class LowestBatteryAction extends SingletonAction<LowestBatterySettings> 
 					: null,
 			});
 		}
+	}
+
+	/** Adopts a shared look. Called for every key when global settings change. */
+	async applyShared(appearance: Appearance): Promise<void> {
+		await applyAppearance(this.actions, appearance);
 	}
 
 	private state(actionId: string): KeyState {
@@ -138,7 +161,10 @@ export class LowestBatteryAction extends SingletonAction<LowestBatterySettings> 
 		const migrated = migrate(settings);
 		if (!migrated) return settings;
 
-		const merged = { watch: DEFAULTS.watch, ...migrated } as LowestBatterySettings;
+		// A new key matches the look already shared across the deck, if there is one.
+		const shared = settings.configured ? undefined : await sharedAppearance();
+		const merged = { watch: DEFAULTS.watch, ...migrated, ...(shared ?? {}) } as LowestBatterySettings;
+
 		await action.setSettings(merged);
 		return merged;
 	}
@@ -191,9 +217,19 @@ export class LowestBatteryAction extends SingletonAction<LowestBatterySettings> 
 
 			await this.draw(action, settings, lowest.reading, lowest.device.kind);
 
+			// Once per trip below the threshold, not once per poll — see the same
+			// guard in battery-status.ts.
 			const alertBelow = settings.alertBelow ?? DEFAULTS.alertBelow;
-			if (alertBelow > 0 && lowest.reading.percent !== null && lowest.reading.percent < alertBelow) {
-				await action.showAlert();
+			const state = this.state(action.id);
+			const percent = lowest.reading.percent;
+
+			if (alertBelow > 0 && percent !== null) {
+				if (percent >= alertBelow || lowest.reading.status === "charging") {
+					state.alerted = false;
+				} else if (!state.alerted) {
+					state.alerted = true;
+					await action.showAlert();
+				}
 			}
 		} catch (err) {
 			streamDeck.logger.error("lowest-battery: refresh threw", err);
@@ -269,6 +305,7 @@ export class LowestBatteryAction extends SingletonAction<LowestBatterySettings> 
 				showIcon: settings.showIcon ?? DEFAULTS.showIcon,
 				showPercent: settings.showPercent ?? DEFAULTS.showPercent,
 				showName: name !== "",
+				lowest: true,
 				lowThreshold: settings.lowThreshold ?? DEFAULTS.lowThreshold,
 				mediumThreshold: settings.mediumThreshold ?? DEFAULTS.mediumThreshold,
 				colors: faceColors(settings),

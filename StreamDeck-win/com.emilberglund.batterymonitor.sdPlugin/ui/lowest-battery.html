@@ -87,13 +87,18 @@
 
 	<sdpi-item label="Deck title">
 		<sdpi-select setting="titleMode" default="none">
-			<option value="none">Leave my title alone</option>
+			<option value="none">Nothing</option>
 			<option value="device">Device name</option>
 			<option value="percent">Percentage</option>
 		</sdpi-select>
 	</sdpi-item>
 
-	<span class="hint">Keep "which device" on: a low number tells you something needs charging, but not what.</span>
+	<span class="hint">
+		Keep "which device" on: a low number tells you something needs charging, but
+		not what. The key carries a chevron in the corner so it reads as the pile's
+		lowest rather than one device's own level, and gains a coloured frame once
+		that device is under the low threshold.
+	</span>
 
 	<div class="section">Levels</div>
 
@@ -138,6 +143,12 @@
 			<label><sdpi-color setting="colorBackground" default="#000000"></sdpi-color>Background</label>
 		</div>
 	</sdpi-item>
+
+	<sdpi-item label="">
+		<sdpi-button id="share-appearance">Apply this look to all keys</sdpi-button>
+	</sdpi-item>
+
+	<span class="hint">Copies the colours, thresholds and what's drawn to every other Battery Monitor key.</span>
 
 	<script>
 		const client = SDPIComponents.streamDeckClient;
@@ -195,6 +206,8 @@
 			statusLevel.textContent = value.percent === null ? "—" : `${value.percent}%`;
 			statusState.textContent = value.state;
 		});
+
+		document.getElementById("share-appearance").addEventListener("click", () => send({ event: "shareAppearance" }));
 
 		const askForStatus = () => send({ event: "getStatus" });
 		askForStatus();

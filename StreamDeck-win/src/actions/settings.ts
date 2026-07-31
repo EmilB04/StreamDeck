@@ -5,9 +5,6 @@ import { DEFAULT_COLORS, LEGACY_BACKGROUND_COLORS, LEGACY_CHARGING_COLORS } from
 /** What, if anything, the plugin writes into the key's title. */
 export type TitleMode = "none" | "device" | "percent";
 
-/** What the small text line under the meter shows. */
-export type NameSource = "device" | "title" | "auto";
-
 /** Whether the poll interval is exactly what was configured, or varies with what's happening. */
 export type PollMode = "fixed" | "adaptive";
 
@@ -25,6 +22,10 @@ export type BatterySettings = {
 	/** Last known label/kind, so a disconnected device still renders sensibly. */
 	deviceLabel?: string;
 	deviceKind?: DeviceKind;
+	/** Overrides the name the device reports — Windows calls one phone here "4". */
+	displayName?: string;
+	/** Overrides the drawn form factor; "auto" believes the provider. */
+	iconKind?: DeviceKind | "auto";
 	refreshSeconds?: number;
 	pollMode?: PollMode;
 	powerSource?: PowerSource;
@@ -47,6 +48,8 @@ export type BatterySettings = {
 	 */
 	lastPercent?: number;
 	lastSeenAt?: number;
+	/** Recent levels, oldest first, for the time-remaining estimate. */
+	history?: Sample[];
 	/** Whether a disconnected device shows that level instead of a dash. */
 	showLastKnown?: boolean;
 
@@ -55,8 +58,8 @@ export type BatterySettings = {
 	showIcon?: boolean;
 	showPercent?: boolean;
 	showName?: boolean;
-	/** Whether that line shows the device name, the user's own title, or the better of the two. */
-	nameSource?: NameSource;
+	/** Replaces the name line with how long the level should last. */
+	showTimeLeft?: boolean;
 	titleMode?: TitleMode;
 	lowThreshold?: number;
 	mediumThreshold?: number;
@@ -74,6 +77,113 @@ export type BatterySettings = {
 	/** Bumped when a default changes in a way existing keys should pick up. */
 	settingsVersion?: number;
 };
+
+/** A level and when it was seen, for working out how fast it's dropping. */
+export type Sample = { percent: number; at: number };
+
+/**
+ * How many drops to remember. Enough to average out a coarse gauge that moves
+ * in 10% steps, few enough that a settings write stays small.
+ */
+const MAX_SAMPLES = 8;
+
+/** Estimates need a real drop over a real interval, or the maths is noise. */
+const MIN_DROP_PERCENT = 3;
+const MIN_SPAN_MS = 10 * 60_000;
+/** Beyond this the answer stops meaning anything useful. */
+const MAX_ESTIMATE_MS = 14 * 24 * 60 * 60_000;
+
+/**
+ * Adds a reading to the history, and throws the history away when the level
+ * goes up: a device that has been on a charger has no useful discharge history
+ * behind it, and averaging across the charge would report nonsense.
+ */
+export function recordSample(history: Sample[] | undefined, percent: number, at: number): Sample[] {
+	const samples = history ?? [];
+	const last = samples[samples.length - 1];
+
+	if (last && percent > last.percent) return [{ percent, at }];
+	if (last && percent === last.percent) return samples;
+
+	return [...samples, { percent, at }].slice(-MAX_SAMPLES);
+}
+
+/**
+ * Milliseconds until empty at the rate the level has actually been dropping,
+ * or null when there isn't enough history to say.
+ *
+ * The oldest and newest samples give the rate. A median-of-intervals would
+ * resist a single odd reading better, but wireless gauges move in steps of 10%
+ * — over a handful of steps the endpoints *are* the trend, and anything
+ * cleverer would be fitting noise.
+ */
+export function estimateRemaining(history: Sample[] | undefined, percent: number, now: number): number | null {
+	if (!history || history.length < 2) return null;
+
+	const first = history[0];
+	const last = history[history.length - 1];
+
+	const drop = first.percent - last.percent;
+	const span = last.at - first.at;
+	if (drop < MIN_DROP_PERCENT || span < MIN_SPAN_MS) return null;
+
+	const msPerPercent = span / drop;
+	const remaining = percent * msPerPercent - (now - last.at);
+
+	if (remaining <= 0 || remaining > MAX_ESTIMATE_MS) return null;
+	return remaining;
+}
+
+/** "3h 20m", "45m", "2d" — short enough for the key's name line. */
+export function formatDuration(ms: number): string {
+	const minutes = Math.round(ms / 60_000);
+	if (minutes < 60) return `${minutes}m`;
+
+	const hours = Math.floor(minutes / 60);
+	if (hours < 24) {
+		const rest = minutes % 60;
+		return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
+	}
+
+	const days = Math.floor(hours / 24);
+	const restHours = hours % 24;
+	return restHours === 0 ? `${days}d` : `${days}d ${restHours}h`;
+}
+
+/**
+ * The settings that describe how a key looks rather than what it watches.
+ * Shared across keys by the "apply to all" button, via global settings.
+ */
+export const APPEARANCE_KEYS = [
+	"style",
+	"showIcon",
+	"showPercent",
+	"showName",
+	"showTimeLeft",
+	"lowThreshold",
+	"mediumThreshold",
+	"alertBelow",
+	"colorLow",
+	"colorMedium",
+	"colorHigh",
+	"colorCharging",
+	"colorForeground",
+	"colorBackground",
+] as const;
+
+export type Appearance = Pick<BatterySettings, (typeof APPEARANCE_KEYS)[number]>;
+
+/** Settings shared by every key of this plugin. */
+export type GlobalSettings = { appearance?: Appearance };
+
+export function extractAppearance(settings: BatterySettings): Appearance {
+	const appearance: Appearance = {};
+	for (const key of APPEARANCE_KEYS) {
+		const value = settings[key];
+		if (value !== undefined) Object.assign(appearance, { [key]: value });
+	}
+	return appearance;
+}
 
 /** Which devices the "Lowest battery" action counts. */
 export type WatchScope = "peripherals" | "everything";
@@ -117,7 +227,8 @@ export const DEFAULTS = {
 	showIcon: false,
 	showPercent: true,
 	showName: true,
-	nameSource: "auto" as NameSource,
+	showTimeLeft: false,
+	iconKind: "auto" as DeviceKind | "auto",
 	titleMode: "none" as TitleMode,
 	lowThreshold: 20,
 	mediumThreshold: 50,
