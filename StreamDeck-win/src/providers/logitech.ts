@@ -32,6 +32,17 @@ const FEATURE_BATTERY_LEGACY = 0x1000;
 const FEATURE_BATTERY_UNIFIED = 0x1004;
 
 const RESPONSE_TIMEOUT_MS = 250;
+
+/**
+ * A device that's been sitting still is in power-save and answers its first
+ * ping late, if at all — a mouse nobody has touched for a minute needs longer
+ * than one that was just moved. Battery reads therefore wait longer and ask
+ * twice, while everything else keeps the short timeout: discovery probes empty
+ * receiver slots, and each of those costs a full timeout with nothing to show
+ * for it.
+ */
+const BATTERY_TIMEOUT_MS = 700;
+const BATTERY_ATTEMPTS = 2;
 const PING_MARKER = 0x5a;
 
 /**
@@ -123,7 +134,7 @@ export class LogitechProvider implements BatteryProvider {
 		for (const endpoint of endpoints) {
 			if (result) break;
 			await withLink(endpoint, async (link) => {
-				if (!(await ping(link, deviceIndex))) return;
+				if (!(await ping(link, deviceIndex, BATTERY_TIMEOUT_MS, BATTERY_ATTEMPTS))) return;
 				const feature = await findBatteryFeature(link, deviceIndex);
 				if (!feature) {
 					result = {
@@ -143,7 +154,7 @@ export class LogitechProvider implements BatteryProvider {
 				deviceLabel: device.label,
 				percent: null,
 				status: "not-found",
-				detail: "Device did not answer — powered off or out of range",
+				detail: "No answer after two tries — powered off or out of range",
 			}
 		);
 	}
@@ -259,6 +270,7 @@ class HidppLink {
 		functionId: number,
 		params: number[] = [],
 		preferLong = false,
+		timeoutMs: number = RESPONSE_TIMEOUT_MS,
 	): Promise<number[] | null> {
 		const target = preferLong ? (this.long ?? this.short) : (this.short ?? this.long);
 		if (!target) return Promise.resolve(null);
@@ -303,7 +315,7 @@ class HidppLink {
 			};
 
 			for (const device of listeners) device.on("data", onData);
-			timer = setTimeout(() => finish(null), RESPONSE_TIMEOUT_MS);
+			timer = setTimeout(() => finish(null), timeoutMs);
 
 			try {
 				target.write(report);
@@ -348,9 +360,25 @@ async function withLink(endpoint: HidppEndpoint, fn: (link: HidppLink) => Promis
 }
 
 /** Root.getProtocolVersion, used as a cheap "is anything on this index?" probe. */
-async function ping(link: HidppLink, deviceIndex: number): Promise<boolean> {
-	const resp = await link.request(deviceIndex, FEATURE_ROOT, 0x01, [0x00, 0x00, PING_MARKER]);
-	return resp !== null && resp[6] === PING_MARKER;
+/**
+ * Checks a device is there and awake.
+ *
+ * Discovery uses the default short timeout, because it pings all seven slots on
+ * every endpoint and an empty one can only be identified by the timeout. Reading
+ * a device we already know exists is the opposite case: it's worth waiting, and
+ * worth asking twice, since the first ping is often what wakes the radio.
+ */
+async function ping(
+	link: HidppLink,
+	deviceIndex: number,
+	timeoutMs: number = RESPONSE_TIMEOUT_MS,
+	attempts = 1,
+): Promise<boolean> {
+	for (let attempt = 0; attempt < attempts; attempt++) {
+		const resp = await link.request(deviceIndex, FEATURE_ROOT, 0x01, [0x00, 0x00, PING_MARKER], false, timeoutMs);
+		if (resp !== null && resp[6] === PING_MARKER) return true;
+	}
+	return false;
 }
 
 async function featureIndex(link: HidppLink, deviceIndex: number, featureId: number): Promise<number | null> {
@@ -378,7 +406,7 @@ async function readBattery(
 ): Promise<BatteryReading> {
 	if (feature.unified) {
 		// getStatus() -> stateOfCharge, batteryLevel, chargingStatus, externalPower
-		const resp = await link.request(deviceIndex, feature.index, 0x01);
+		const resp = await requestBattery(link, deviceIndex, feature.index, 0x01);
 		if (resp) {
 			const percent = resp[4];
 			const chargingStatus = resp[6];
@@ -393,7 +421,7 @@ async function readBattery(
 		}
 	} else {
 		// getBatteryLevelStatus() -> level%, nextLevel%, status
-		const resp = await link.request(deviceIndex, feature.index, 0x00);
+		const resp = await requestBattery(link, deviceIndex, feature.index, 0x00);
 		if (resp) {
 			const percent = resp[4];
 			const status = resp[6];
@@ -412,8 +440,28 @@ async function readBattery(
 		deviceLabel: label,
 		percent: null,
 		status: "not-found",
-		detail: "Device did not report a battery level — powered off or out of range",
+		detail: "No answer after two tries — powered off or out of range",
 	};
+}
+
+/**
+ * Asks for the battery, giving a sleeping device a second chance.
+ *
+ * The first request often doubles as the thing that wakes the radio: an idle
+ * mouse misses it and answers the next one. Without the retry, a mouse that was
+ * simply sitting still read as "powered off or out of range".
+ */
+async function requestBattery(
+	link: HidppLink,
+	deviceIndex: number,
+	featureIdx: number,
+	functionId: number,
+): Promise<number[] | null> {
+	for (let attempt = 0; attempt < BATTERY_ATTEMPTS; attempt++) {
+		const resp = await link.request(deviceIndex, featureIdx, functionId, [], false, BATTERY_TIMEOUT_MS);
+		if (resp) return resp;
+	}
+	return null;
 }
 
 /** Feature 0x0005: the device's own product name, read in chunks. */

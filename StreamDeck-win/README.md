@@ -326,7 +326,14 @@ device is gone:
 
 The stored level is only written when the percentage changes (or its timestamp
 has drifted more than 10 minutes), so an idle key isn't writing settings every
-poll. The warning fires **once per trip** below the threshold, not once per
+poll. Any status without a live number qualifies for the substitution except
+"mains powered", which has no level to be missing. That includes "unsupported":
+a ROG receiver whose keyboard is switched off reports exactly that, since the
+dongle is still plugged in and only the device behind it went quiet — and a key
+that has read a percentage from it before has proof the battery is real. Without
+that, those keys showed "N/A" and threw away the last level they knew.
+
+The warning fires **once per trip** below the threshold, not once per
 reading: the old behaviour flashed on every poll, which at a 10s interval is six
 flashes a minute for as long as the device stays low — enough to make anyone
 turn the warning off entirely, costing them the one alert that mattered. The

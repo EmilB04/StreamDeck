@@ -41,12 +41,14 @@ const PULSE_INTERVAL_MS = 450;
 const PULSE_STEPS = 8;
 
 /**
- * How long a last-known level's timestamp may drift before it's rewritten. The
- * percentage is persisted the moment it changes; refreshing the timestamp alone
- * on every poll would be a settings write per minute forever, and the age is
- * only ever shown rounded, so a few minutes of slack costs nothing.
+ * How long the persisted "last seen" stamp may drift before it's rewritten.
+ *
+ * The live age comes from memory and is exact; this copy exists so a key that
+ * has just been restarted can still say roughly when the device was last there.
+ * Rewriting it on every poll would be a settings write a minute, forever, so it
+ * trades a few minutes of accuracy — but only across a restart.
  */
-const LAST_SEEN_TOUCH_MS = 10 * 60_000;
+const LAST_SEEN_TOUCH_MS = 5 * 60_000;
 
 /**
  * Everything the plugin tracks for one visible key. A key's timers, its last
@@ -82,6 +84,15 @@ type KeyState = {
 	 * colour edit or a pulse frame without touching the device.
 	 */
 	drawn?: { reading: BatteryReading; kind: DeviceKind; settings: BatterySettings };
+	/**
+	 * When a live reading last arrived, to the second.
+	 *
+	 * Kept in memory rather than in settings: the persisted `lastSeenAt` is only
+	 * rewritten when the level changes, so "connected 44 minutes ago" was really
+	 * "the level last changed 44 minutes ago". Writing settings on every poll
+	 * just to keep a clock accurate would be a write a minute, forever.
+	 */
+	lastLiveAt?: number;
 	/** Device the key was last refreshed for, to spot a changed one. */
 	deviceKey?: string;
 	/** A message is on the key; painting the face is suspended until it clears. */
@@ -358,13 +369,14 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 
 		const settings = drawn.settings;
 		const reading = this.forPowerSource(settings, this.withLastKnown(settings, drawn.reading));
+		const age = ageLabel(this.keys.get(actionId)?.lastLiveAt ?? settings.lastSeenAt);
 
 		await streamDeck.ui.sendToPropertyInspector({
 			event: "getStatus",
 			status: {
 				label: this.labelFor(settings, reading),
 				percent: reading.percent,
-				state: statusWording(reading),
+				state: reading.status === "stale" && age ? `Disconnected — last seen ${age} ago` : statusWording(reading),
 				tone: statusTone(reading.status),
 			},
 		});
@@ -580,10 +592,14 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 	private withLastKnown(settings: BatterySettings, reading: BatteryReading): BatteryReading {
 		if (reading.percent !== null) return reading;
 		if (!(settings.showLastKnown ?? DEFAULTS.showLastKnown)) return reading;
-		// "unsupported" means the device exposes no battery at all, so there is
-		// nothing it could have been at; leave that case saying so.
-		if (reading.status !== "not-found" && reading.status !== "error") return reading;
+		if (reading.status === "mains") return reading;
 
+		// A stored level is the proof that matters. "unsupported" normally means
+		// the device has no battery to read — but a ROG receiver whose keyboard is
+		// switched off says exactly that, because the dongle is still plugged in
+		// and only the device behind it went quiet. If this key has read a
+		// percentage from it before, the battery is real and the provider is
+		// saying "no answer just now", which is what being offline looks like.
 		const percent = settings.lastPercent;
 		if (percent === undefined) return reading;
 
@@ -621,6 +637,10 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 		kind: DeviceKind,
 	): Promise<void> {
 		const state = this.state(action.id);
+
+		// A number that came off the device just now — the moment worth reporting
+		// as "last connected", regardless of whether the level moved.
+		if (reading.percent !== null && reading.status !== "stale") state.lastLiveAt = Date.now();
 
 		// Counted before the new reading replaces the old one; adaptive polling
 		// backs off while this keeps climbing.
@@ -746,9 +766,9 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 	 * `UserTitleEnabled: false`, so Stream Deck hides its Title field and
 	 * "Nickname" is the single place a key is named.
 	 */
-	private nameLine(settings: BatterySettings, reading: BatteryReading): string {
+	private nameLine(settings: BatterySettings, reading: BatteryReading, lastLiveAt?: number): string {
 		if (!(settings.showName ?? DEFAULTS.showName)) return "";
-		return this.deviceLine(settings, reading);
+		return this.deviceLine(settings, reading, lastLiveAt);
 	}
 
 	/**
@@ -769,7 +789,7 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 	 * there's room for one of the two, and "2h 40m" is the more useful of them
 	 * once you already know which key is which.
 	 */
-	private deviceLine(settings: BatterySettings, reading: BatteryReading): string {
+	private deviceLine(settings: BatterySettings, reading: BatteryReading, lastLiveAt?: number): string {
 		const label = this.labelFor(settings, reading);
 
 		if (settings.showTimeLeft && reading.status === "ok" && reading.percent !== null) {
@@ -783,7 +803,9 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 		}
 
 		if (reading.status !== "stale") return label;
-		const age = ageLabel(settings.lastSeenAt);
+		// In-memory first: it's exact. The persisted stamp is the fallback after a
+		// restart, when nothing in memory knows when the device was last seen.
+		const age = ageLabel(lastLiveAt ?? settings.lastSeenAt);
 		return age ? `${age} · ${label}` : label;
 	}
 
@@ -799,8 +821,9 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 		// cached, and gets drawn when the message clears.
 		if (this.state(action.id).showingNotice) return;
 
+		const state = this.state(action.id);
 		const reading = this.forPowerSource(settings, this.withLastKnown(settings, live));
-		const name = this.nameLine(settings, reading);
+		const name = this.nameLine(settings, reading, state.lastLiveAt);
 
 		// "auto" believes the provider; anything else is the user saying they know
 		// better, which for a device the OS calls "Bluetooth device" they do.
