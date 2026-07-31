@@ -84,7 +84,12 @@ native binary, and the one WSL produces won't load inside Stream Deck.
 
 ## Customizing the key
 
-Everything below is per-key, in the property inspector.
+Everything below is per-key, in the property inspector, which is grouped as
+Device → Updates → On press → Key face → Levels → Colours. A strip at the top
+shows what the key is reading right now; the plugin answers those requests from
+the reading it already drew, so the panel can ask every few seconds without
+touching a device. Explanations sit behind "About …" disclosures rather than
+under every control.
 
 | Setting | Options | Default |
 |---|---|---|

@@ -83,6 +83,34 @@ function pickerLabel(device: DiscoveredDevice): string {
 	return `${device.label} (no battery data)`;
 }
 
+/** One line for the property inspector's status strip, in the user's terms. */
+function statusWording(reading: BatteryReading): string {
+	switch (reading.status) {
+		case "charging":
+			return reading.detail === "Charge complete" ? "On the charger, full" : "Charging";
+		case "mains":
+			return "Mains powered";
+		case "stale":
+			return "Disconnected — last known level";
+		case "not-found":
+			return "Not detected";
+		case "unsupported":
+			return "No battery to read";
+		case "error":
+			return "Couldn't be read";
+		default:
+			return "Connected";
+	}
+}
+
+/** Which of the strip's three looks to use. */
+function statusTone(status: BatteryReading["status"]): "charging" | "offline" | "ok" | "idle" {
+	if (status === "charging") return "charging";
+	if (status === "stale" || status === "not-found" || status === "error") return "offline";
+	if (status === "ok" || status === "mains") return "ok";
+	return "idle";
+}
+
 /**
  * Coarse "how long ago", e.g. "12m" / "3h" / "2d". Empty for anything under a
  * minute (and for a missing timestamp), where "0m ago" would say nothing.
@@ -244,6 +272,10 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 	 * providers can see right now; its refresh button drops the cache first.
 	 */
 	override async onSendToPlugin(ev: SendToPluginEvent<UiMessage, BatterySettings>): Promise<void> {
+		if (ev.payload?.event === "getStatus") {
+			await this.sendStatus(ev.action.id);
+			return;
+		}
 		if (ev.payload?.event === "getApps") {
 			await this.sendApps(ev.action, ev.payload?.isRefresh === true);
 			return;
@@ -271,6 +303,34 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 		}
 
 		await streamDeck.ui.sendToPropertyInspector({ event: "getDevices", items });
+	}
+
+	/**
+	 * Tells the property inspector what the key is currently showing, so the panel
+	 * opens with an answer rather than only questions.
+	 *
+	 * This reports the reading already drawn — no device is touched — so the panel
+	 * can ask for it as often as it likes.
+	 */
+	private async sendStatus(actionId: string): Promise<void> {
+		const drawn = this.keys.get(actionId)?.drawn;
+		if (!drawn) {
+			await streamDeck.ui.sendToPropertyInspector({ event: "getStatus", status: null });
+			return;
+		}
+
+		const settings = drawn.settings;
+		const reading = this.forPowerSource(settings, this.withLastKnown(settings, drawn.reading));
+
+		await streamDeck.ui.sendToPropertyInspector({
+			event: "getStatus",
+			status: {
+				label: reading.deviceLabel,
+				percent: reading.percent,
+				state: statusWording(reading),
+				tone: statusTone(reading.status),
+			},
+		});
 	}
 
 	/**
