@@ -100,7 +100,7 @@ under every control.
 | When pressed | check the battery, or check it and open an app/file/URL | check the battery |
 | If device is off | show its last known level, or a dash | show last known |
 | Meter style | Battery bar / Ring around the key / Percentage only | Battery bar |
-| Draw on the key | device icon, percentage, name line (any combination) | icon + percentage |
+| Draw on the key | device icon, percentage, name line, last level when off | percentage + name line |
 | Name line text | my title if set, else device name / device name / my title | my title if set |
 | Stream Deck title | leave my title alone / device name / percentage | leave alone |
 | Low colour up to | 0–50% | 20 |
@@ -109,7 +109,7 @@ under every control.
 | Colours | low, medium, high, charging, icon & outline, background | see below |
 
 Defaults: low `#e35d5d`, medium `#e3b34d`, high `#2ecc71`, charging `#55ff7f`,
-foreground `#eaeaea`, background `#1e2024`.
+foreground `#eaeaea`, background `#000000`.
 
 While charging, the key shows a bolt in the top left and breathes slowly in the charging colour
 (a ~3.6s opacity swing between 0.78 and 1.0). Stream Deck rasterises each image
@@ -229,10 +229,11 @@ left switched off below the threshold would flash forever. A device that exposes
 no battery at all still shows `N/A`, since there is no earlier level it could
 fall back to.
 
-The charging default has changed twice: blue to green in settings v2, then to a
-brighter green in v4. Existing keys are migrated automatically, but only if
-their charging colour is still one this plugin chose (`LEGACY_CHARGING_COLORS`)
-— a colour you picked yourself is left alone.
+Two defaults have moved since v1: the charging colour (blue to green in v2, to a
+brighter green in v4) and the background (near-black `#1e2024` to `#000000` in
+v5). Existing keys follow, but only where the colour is still one this plugin
+chose (`LEGACY_CHARGING_COLORS`, `LEGACY_BACKGROUND_COLORS`) — one you picked
+yourself is left alone.
 
 ### Charging without a charging flag
 
@@ -251,6 +252,21 @@ charged somewhere else, not that it's charging now).
 
 It is a guess, and it's wrong in one case: unplug at a level the device then
 holds, and the bolt stays until the first drop.
+
+### Device icons
+
+Eleven form factors are drawn: headset, earbuds, mouse, keyboard, gamepad,
+phone, tablet, speaker, microphone, watch, and a generic fallback. Providers
+pick one from what they know — Logitech's HID++ device type, a HID usage page,
+or the device's own name — and the key draws it.
+
+Every glyph lives on one 24×24 grid at one stroke weight, then scales into
+whichever slot the layout gives it (21px in the flat styles, 17px inside the
+ring). That shared grid is what makes a keyboard and a phone look like one set
+rather than clip art from different places, and it keeps their optical sizes in
+step; before it, each glyph carried hand-placed coordinates and its own weight.
+Strokes are round-capped and outlined rather than filled, except for details
+that would fill in at 20px — keycaps, gamepad buttons, a speaker's tweeter.
 
 ### Layout
 
@@ -277,13 +293,23 @@ Stream Deck paints its own title on top of the plugin's image, and it ignores a
 plugin-set title on any key where the user typed one. That constrains both title
 settings:
 
-- **Key title** only takes effect on keys with an empty Title field. "Leave my
-  title alone" is the default and never calls `setTitle` at all.
+- **Key title** only takes effect on keys with an empty Title field. Switching
+  back to "leave my title alone" calls `setTitle()` with no argument, which
+  hands the title back to Stream Deck — without that, the last title the plugin
+  wrote would stay on the key for good. The applied value is remembered so a
+  repaint doesn't re-send an unchanged title, and it starts unset so the first
+  paint after a restart clears anything left behind by a previous run.
+- A title the plugin wrote is not treated as a title you chose: it echoes back
+  through `titleParametersDidChange`, and without that check "device name" mode
+  would read as a custom title and suppress the name line.
 - **Name line** can render your own title in the key's own style (small, muted,
-  laid out with the icon and percentage) — but only once you hide Stream Deck's
-  title with the "T" toggle beside the Title field. While Stream Deck is still
-  drawing it, "my title if set" falls back to the device name rather than
-  printing the same text twice.
+  laid out with the meter and percentage) — but only once you hide Stream Deck's
+  title with the "T" toggle beside the Title field.
+
+A title you type always replaces the device name; it never appears alongside it.
+While Stream Deck is still drawing that title itself, the key already carries
+the words, so the plugin draws no name line at all rather than repeating the
+device name underneath and making the key say two different things.
 
 The plugin learns your title from `titleParametersDidChange`, which also reports
 whether the title is visible. Multi-line titles are flattened to one line.

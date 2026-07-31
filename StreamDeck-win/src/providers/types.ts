@@ -8,7 +8,18 @@ export type BatteryStatus =
 	| "error";
 
 /** Physical form factor of the device, used to pick which icon to draw on the key. */
-export type DeviceKind = "headset" | "mouse" | "keyboard" | "gamepad" | "other";
+export type DeviceKind =
+	| "headset"
+	| "earbuds"
+	| "mouse"
+	| "keyboard"
+	| "gamepad"
+	| "phone"
+	| "tablet"
+	| "speaker"
+	| "microphone"
+	| "watch"
+	| "other";
 
 export interface BatteryReading {
 	deviceLabel: string;

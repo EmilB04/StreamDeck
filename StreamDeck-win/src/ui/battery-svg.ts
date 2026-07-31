@@ -40,7 +40,7 @@ export const DEFAULT_COLORS: FaceColors = {
 	medium: "#e3b34d",
 	high: "#2ecc71",
 	charging: "#55ff7f",
-	background: "#1e2024",
+	background: "#000000",
 	foreground: "#eaeaea",
 };
 
@@ -51,11 +51,15 @@ export const DEFAULT_COLORS: FaceColors = {
  */
 export const LEGACY_CHARGING_COLORS = ["#3ba7ff", "#3ddc84"];
 
+/** Backgrounds this plugin has shipped as the default, oldest first. */
+export const LEGACY_BACKGROUND_COLORS = ["#1e2024"];
+
 const MUTED = "#5a5f66";
 /** How far a last-known ("stale") face is faded relative to a live one. */
 const STALE_OPACITY = 0.45;
 const SIZE = 72;
-const GAP = 4;
+/** Breathing room between the icon, the meter, the number and the name line. */
+const GAP = 6;
 
 const FONT = "Segoe UI, Helvetica, Arial, sans-serif";
 
@@ -79,14 +83,14 @@ const RING_INNER_WIDTH = (RING_SIZE - RING_STROKE * 2) * 0.78;
 /** Usable width for the other styles, inset from the key edge. */
 const FLAT_INNER_WIDTH = 62;
 
-/** Vertical extent of each icon glyph in its own drawing coordinates. */
-const ICON_BOX: Record<DeviceKind, { top: number; height: number }> = {
-	headset: { top: 11, height: 22 },
-	mouse: { top: 3, height: 25 },
-	keyboard: { top: 8, height: 20 },
-	gamepad: { top: 10, height: 20 },
-	other: { top: 5, height: 24 },
-};
+/**
+ * Every glyph is drawn on the same 24×24 grid with the same stroke weight, then
+ * scaled into whatever slot the layout gives it. Sharing one grid is what makes
+ * a keyboard and a phone look like members of one set rather than clip art from
+ * different places, and it keeps their optical sizes in step.
+ */
+const ICON_GRID = 24;
+const ICON_STROKE = 2.1;
 
 function fitFontSize(text: string, maxWidth: number, maxFont: number): number {
 	const byWidth = maxWidth / (CHAR_WIDTH_RATIO * Math.max(1, text.length));
@@ -159,43 +163,78 @@ function escapeXml(value: string): string {
 }
 
 /**
- * Line-art glyph for the device's form factor. Drawn at its natural position;
- * callers translate (and for the ring, scale) it into the slot the layout gave it.
+ * Line art for the device's form factor, drawn on the shared 24×24 grid.
+ *
+ * Each glyph is stroked rather than filled, at one weight, with round caps and
+ * joins — small solid shapes are reserved for the details that need to read at
+ * ~20px (keycaps, buttons), where a stroked outline would fill in. Everything is
+ * built from the silhouette a person would recognise across a desk: a phone is
+ * its screen, a mic is its capsule and arc, a speaker is its driver.
  */
-function deviceIcon(kind: DeviceKind, color: string): string {
+function deviceGlyph(kind: DeviceKind, color: string): string {
+	const stroke = `fill="none" stroke="${color}" stroke-width="${ICON_STROKE}" stroke-linecap="round" stroke-linejoin="round"`;
+
 	switch (kind) {
 		case "headset":
 			return `
-			<path d="M23 26 v-4 a13 11 0 0 1 26 0 v4" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round"/>
-			<rect x="19" y="22" width="7" height="10" rx="3" fill="${color}"/>
-			<rect x="46" y="22" width="7" height="10" rx="3" fill="${color}"/>
-			<path d="M47 27 q-3 5 -8 5" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
-			<circle cx="38" cy="32" r="1.6" fill="${color}"/>`;
+			<path d="M3.2 15.5 V12 a8.8 8.8 0 0 1 17.6 0 v3.5" ${stroke}/>
+			<rect x="1.4" y="13.4" width="5" height="8.4" rx="2.5" ${stroke}/>
+			<rect x="17.6" y="13.4" width="5" height="8.4" rx="2.5" ${stroke}/>
+			<path d="M18 21.6 q-1.4 2.6 -4.4 2.6" ${stroke}/>
+			<circle cx="12.6" cy="24.2" r="1.1" fill="${color}"/>`;
+		case "earbuds":
+			return `
+			<path d="M7.2 3.4 a4.3 4.3 0 0 1 4.3 4.3 v3.6 a4.3 4.3 0 0 1 -8.6 0 V7.7 a4.3 4.3 0 0 1 4.3 -4.3 z" ${stroke}/>
+			<path d="M7.2 15.6 V20" ${stroke}/>
+			<path d="M16.8 3.4 a4.3 4.3 0 0 1 4.3 4.3 v3.6 a4.3 4.3 0 0 1 -8.6 0 V7.7 a4.3 4.3 0 0 1 4.3 -4.3 z" ${stroke}/>
+			<path d="M16.8 15.6 V20" ${stroke}/>`;
 		case "mouse":
 			return `
-			<rect x="27" y="3" width="18" height="25" rx="9" fill="none" stroke="${color}" stroke-width="2.5"/>
-			<line x1="36" y1="4" x2="36" y2="14" stroke="${color}" stroke-width="2"/>
-			<rect x="34" y="7" width="4" height="6" rx="2" fill="${color}"/>`;
+			<rect x="6.6" y="1.6" width="10.8" height="20.8" rx="5.4" ${stroke}/>
+			<path d="M12 5.4 V9.6" ${stroke}/>`;
 		case "keyboard":
 			return `
-			<rect x="13" y="8" width="46" height="20" rx="3" fill="none" stroke="${color}" stroke-width="2.5"/>
-			<rect x="18" y="13" width="5" height="3" rx="1" fill="${color}"/>
-			<rect x="27" y="13" width="5" height="3" rx="1" fill="${color}"/>
-			<rect x="36" y="13" width="5" height="3" rx="1" fill="${color}"/>
-			<rect x="45" y="13" width="5" height="3" rx="1" fill="${color}"/>
-			<rect x="24" y="20" width="24" height="3" rx="1.5" fill="${color}"/>`;
+			<rect x="1.3" y="5.4" width="21.4" height="13.2" rx="2.6" ${stroke}/>
+			<rect x="4.8" y="9" width="2.6" height="1.9" rx="0.9" fill="${color}"/>
+			<rect x="9.1" y="9" width="2.6" height="1.9" rx="0.9" fill="${color}"/>
+			<rect x="13.4" y="9" width="2.6" height="1.9" rx="0.9" fill="${color}"/>
+			<rect x="17.7" y="9" width="1.9" height="1.9" rx="0.9" fill="${color}"/>
+			<rect x="7.4" y="13.4" width="9.2" height="1.9" rx="0.9" fill="${color}"/>`;
 		case "gamepad":
 			return `
-			<path d="M22 10 h28 a10 10 0 0 1 9 12 l-2 7 a5 5 0 0 1 -9 1 l-3 -5 h-18 l-3 5 a5 5 0 0 1 -9 -1 l-2 -7 a10 10 0 0 1 9 -12 z" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round"/>
-			<line x1="23" y1="16" x2="23" y2="22" stroke="${color}" stroke-width="2.5" stroke-linecap="round"/>
-			<line x1="20" y1="19" x2="26" y2="19" stroke="${color}" stroke-width="2.5" stroke-linecap="round"/>
-			<circle cx="47" cy="17" r="2" fill="${color}"/>
-			<circle cx="52" cy="21" r="2" fill="${color}"/>`;
+			<path d="M8.4 7.6 h7.2 a6.6 6.6 0 0 1 6.4 8.2 l-0.9 3.6 a2.9 2.9 0 0 1 -5.3 0.8 L14.2 17 H9.8 l-1.6 3.2 a2.9 2.9 0 0 1 -5.3 -0.8 l-0.9 -3.6 A6.6 6.6 0 0 1 8.4 7.6 z" ${stroke}/>
+			<path d="M7.2 11.4 v3.2 M5.6 13 h3.2" ${stroke}/>
+			<circle cx="16.2" cy="11.8" r="1.2" fill="${color}"/>
+			<circle cx="18.6" cy="14.2" r="1.2" fill="${color}"/>`;
+		case "phone":
+			return `
+			<rect x="6.4" y="1.4" width="11.2" height="21.2" rx="3.2" ${stroke}/>
+			<path d="M10.4 4.6 h3.2" ${stroke}/>
+			<path d="M10.4 19.8 h3.2" ${stroke}/>`;
+		case "tablet":
+			return `
+			<rect x="3.4" y="2.4" width="17.2" height="19.2" rx="2.6" ${stroke}/>
+			<path d="M9.9 18.6 h4.2" ${stroke}/>`;
+		case "speaker":
+			return `
+			<rect x="5.4" y="2.2" width="13.2" height="19.6" rx="3.2" ${stroke}/>
+			<circle cx="12" cy="14.6" r="3.6" ${stroke}/>
+			<circle cx="12" cy="7" r="1.15" fill="${color}"/>`;
+		case "microphone":
+			return `
+			<rect x="8.9" y="1.5" width="6.2" height="12.2" rx="3.1" ${stroke}/>
+			<path d="M5.6 12.2 a6.4 6.4 0 0 0 12.8 0" ${stroke}/>
+			<path d="M12 18.6 V22" ${stroke}/>
+			<path d="M8.4 22.4 h7.2" ${stroke}/>`;
+		case "watch":
+			return `
+			<rect x="6.2" y="6.2" width="11.6" height="11.6" rx="3.4" ${stroke}/>
+			<path d="M9.2 6.2 V2.6 h5.6 v3.6" ${stroke}/>
+			<path d="M9.2 17.8 v3.6 h5.6 v-3.6" ${stroke}/>`;
 		case "other":
 			return `
-			<rect x="24" y="5" width="24" height="24" rx="5" fill="none" stroke="${color}" stroke-width="2.5"/>
-			<circle cx="36" cy="17" r="4" fill="none" stroke="${color}" stroke-width="2.5"/>
-			<line x1="36" y1="5" x2="36" y2="9" stroke="${color}" stroke-width="2.5" stroke-linecap="round"/>`;
+			<rect x="3.6" y="3.6" width="16.8" height="16.8" rx="4.4" ${stroke}/>
+			<circle cx="12" cy="12" r="3.4" ${stroke}/>`;
 	}
 }
 
@@ -313,8 +352,7 @@ export function batteryKeyImage(options: FaceOptions): string {
 	const label = percent === null ? fallbackLabel(status) : `${percent}%`;
 
 	const isRing = style === "ring";
-	const gap = isRing ? 3 : GAP;
-	const iconScale = isRing ? 0.7 : 1;
+	const gap = isRing ? 4 : GAP;
 	const innerWidth = isRing ? RING_INNER_WIDTH : FLAT_INNER_WIDTH;
 
 	// A small, slow opacity swing reads as "active" without flickering.
@@ -323,11 +361,12 @@ export function batteryKeyImage(options: FaceOptions): string {
 	const blocks: Block[] = [];
 
 	if (options.showIcon) {
-		const box = ICON_BOX[options.kind];
+		const height = isRing ? 17 : 21;
+		const scale = height / ICON_GRID;
 		blocks.push({
-			height: box.height * iconScale,
+			height,
 			render: (y) =>
-				`<g transform="translate(${((SIZE / 2) * (1 - iconScale)).toFixed(2)} ${(y - box.top * iconScale).toFixed(2)}) scale(${iconScale})">${deviceIcon(options.kind, colors.foreground)}</g>`,
+				`<g transform="translate(${((SIZE - ICON_GRID * scale) / 2).toFixed(2)} ${y.toFixed(2)}) scale(${scale.toFixed(3)})">${deviceGlyph(options.kind, colors.foreground)}</g>`,
 		});
 	}
 
@@ -372,7 +411,10 @@ export function batteryKeyImage(options: FaceOptions): string {
 	// style, more than the ring's inner circle). Close the gaps first, then scale
 	// the whole stack down uniformly, so the layout degrades in proportion rather
 	// than spilling over the edge.
-	const available = isRing ? RING_SIZE - RING_STROKE * 2 - 2 : SIZE - 4;
+	// Inside the ring the usable height is less than the inner diameter: a line
+	// of text near the top or bottom of a circle has far less width than one
+	// across its middle, so the stack is kept to the band where it fits.
+	const available = isRing ? (RING_SIZE - RING_STROKE * 2) * 0.8 : SIZE - 4;
 	const content = blocks.reduce((sum, b) => sum + b.height, 0);
 	const gaps = Math.max(0, blocks.length - 1);
 

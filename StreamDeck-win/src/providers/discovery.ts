@@ -28,12 +28,19 @@ const providersById = new Map(providers.map((p) => [p.id, p]));
 /** A scan opens HID interfaces and shells out, so results are reused briefly. */
 const CACHE_TTL_MS = 10_000;
 
+/** Desk peripherals first, then things that merely happen to be paired. */
 const KIND_ORDER: Record<DeviceKind, number> = {
 	headset: 0,
-	mouse: 1,
-	keyboard: 2,
-	gamepad: 3,
-	other: 4,
+	earbuds: 1,
+	mouse: 2,
+	keyboard: 3,
+	gamepad: 4,
+	microphone: 5,
+	speaker: 6,
+	phone: 7,
+	tablet: 8,
+	watch: 9,
+	other: 10,
 };
 
 class DeviceDiscovery {

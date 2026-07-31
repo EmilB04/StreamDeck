@@ -121,8 +121,12 @@ function kindOf(info: HidDeviceInfo): DeviceKind {
 	const name = (info.product ?? "").toLowerCase();
 	if (/keyboard|keypad/.test(name)) return "keyboard";
 	if (/mouse|trackball/.test(name)) return "mouse";
-	if (/headset|headphone|buds|earbud/.test(name)) return "headset";
+	if (/buds|earbud|airpods/.test(name)) return "earbuds";
+	if (/headset|headphone|cloud|arctis/.test(name)) return "headset";
 	if (/controller|gamepad|joystick/.test(name)) return "gamepad";
+	if (/mic\b|microphone|solocast|quadcast|yeti|wave/.test(name)) return "microphone";
+	if (/speaker|soundbar|monitor audio/.test(name)) return "speaker";
+	if (/watch|band\b/.test(name)) return "watch";
 
 	return "other";
 }

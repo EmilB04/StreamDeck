@@ -71,6 +71,12 @@ type KeyState = {
 	/** A message is on the key; painting the face is suspended until it clears. */
 	showingNotice?: boolean;
 	noticeTimer?: NodeJS.Timeout;
+	/**
+	 * Last title written, boxed so "never written" is distinguishable from
+	 * "written as undefined" — the latter is what hands the title back to
+	 * Stream Deck.
+	 */
+	titleApplied?: { value: string | undefined };
 };
 
 /**
@@ -680,14 +686,26 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 		if (!(settings.showName ?? DEFAULTS.showName)) return "";
 
 		const source = settings.nameSource ?? DEFAULTS.nameSource;
-		const info = this.state(action.id).title;
+		const state = this.state(action.id);
+		const info = state.title;
+
+		// A title this plugin wrote is not a title the user chose. Without this,
+		// "device name" or "percentage" mode would echo back through
+		// titleParametersDidChange and read as a custom title, suppressing the
+		// name line the user actually asked for.
+		const raw = info?.title === state.titleApplied?.value ? "" : (info?.title ?? "");
 		// Stream Deck titles can be multi-line; the key face has room for one.
-		const custom = (info?.title ?? "").replace(/\s+/g, " ").trim();
+		const custom = raw.replace(/\s+/g, " ").trim();
 
 		const device = this.deviceLine(settings, reading);
 		const wantsTitle = source === "title" || (source === "auto" && custom !== "");
 		if (!wantsTitle) return device;
-		if (info?.showTitle) return source === "auto" ? device : "";
+
+		// A title the user typed replaces the device name rather than joining it.
+		// While Stream Deck is drawing that title itself, the key already carries
+		// the words, so the plugin draws no line at all instead of printing the
+		// device name underneath and having the key say two different things.
+		if (info?.showTitle) return "";
 
 		return custom;
 	}
@@ -736,15 +754,43 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 			}),
 		);
 
-		// "none" deliberately never calls setTitle, so a title typed by the user in
-		// the property inspector survives.
-		const titleMode = settings.titleMode ?? DEFAULTS.titleMode;
-		if (titleMode === "device") {
-			await action.setTitle(reading.deviceLabel);
-		} else if (titleMode === "percent") {
+		await this.applyTitle(action, settings, reading);
+	}
+
+	/**
+	 * Writes the key's title, or gives it back.
+	 *
+	 * Switching away from "device name" or "percentage" has to actively undo what
+	 * was written, otherwise the last title the plugin set stays on the key for
+	 * good. `setTitle()` with no argument is the undo: Stream Deck restores the
+	 * title from the manifest, and a title the user typed is never ours to
+	 * overwrite in the first place.
+	 *
+	 * The applied value is remembered so a repaint — a pulse frame, a colour
+	 * edit — doesn't re-send a title that hasn't changed. It starts unset rather
+	 * than empty so the first paint after a restart always writes, which is what
+	 * clears a title left behind by a previous run.
+	 */
+	private async applyTitle(
+		action: KeyAction<BatterySettings>,
+		settings: BatterySettings,
+		reading: BatteryReading,
+	): Promise<void> {
+		const mode = settings.titleMode ?? DEFAULTS.titleMode;
+
+		let wanted: string | undefined;
+		if (mode === "device") {
+			wanted = reading.deviceLabel;
+		} else if (mode === "percent") {
 			// A last-known level gets a "~" so the title doesn't claim to be current.
 			const prefix = reading.status === "stale" ? "~" : "";
-			await action.setTitle(reading.percent === null ? "" : `${prefix}${reading.percent}%`);
+			wanted = reading.percent === null ? "" : `${prefix}${reading.percent}%`;
 		}
+
+		const state = this.state(action.id);
+		if (state.titleApplied?.value === wanted) return;
+
+		await action.setTitle(wanted);
+		state.titleApplied = { value: wanted };
 	}
 }

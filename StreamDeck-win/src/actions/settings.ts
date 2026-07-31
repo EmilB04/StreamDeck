@@ -1,6 +1,6 @@
 import type { BatteryReading, DeviceKind } from "../providers/types";
 import type { BatteryStyle, FaceColors } from "../ui/battery-svg";
-import { DEFAULT_COLORS, LEGACY_CHARGING_COLORS } from "../ui/battery-svg";
+import { DEFAULT_COLORS, LEGACY_BACKGROUND_COLORS, LEGACY_CHARGING_COLORS } from "../ui/battery-svg";
 
 /** What, if anything, the plugin writes into the key's title. */
 export type TitleMode = "none" | "device" | "percent";
@@ -84,9 +84,9 @@ export const MIN_REFRESH_SECONDS = 10;
 
 /**
  * v2: the charging colour moved from blue to green. v3: last-known level.
- * v4: the charging green was brightened.
+ * v4: the charging green was brightened. v5: the background went black.
  */
-export const SETTINGS_VERSION = 4;
+export const SETTINGS_VERSION = 5;
 
 export const DEFAULTS = {
 	refreshSeconds: 60,
@@ -94,9 +94,9 @@ export const DEFAULTS = {
 	powerSource: "auto" as PowerSource,
 	showLastKnown: true,
 	style: "bar" as BatteryStyle,
-	showIcon: true,
+	showIcon: false,
 	showPercent: true,
-	showName: false,
+	showName: true,
 	nameSource: "auto" as NameSource,
 	titleMode: "none" as TitleMode,
 	lowThreshold: 20,
@@ -131,6 +131,14 @@ export function migrate(settings: BatterySettings): BatterySettings | undefined 
 		migrated.colorCharging === undefined || LEGACY_CHARGING_COLORS.includes(migrated.colorCharging);
 	if (version < SETTINGS_VERSION && chargingIsADefault) {
 		migrated.colorCharging = DEFAULTS.colorCharging;
+	}
+
+	// Same rule for the background, which went from near-black to black: a key
+	// still on a shipped default follows, one the user set keeps what it has.
+	const backgroundIsADefault =
+		migrated.colorBackground === undefined || LEGACY_BACKGROUND_COLORS.includes(migrated.colorBackground);
+	if (version < SETTINGS_VERSION && backgroundIsADefault) {
+		migrated.colorBackground = DEFAULTS.colorBackground;
 	}
 
 	// v2 -> v3 added showLastKnown; the defaults merge below turns it on.

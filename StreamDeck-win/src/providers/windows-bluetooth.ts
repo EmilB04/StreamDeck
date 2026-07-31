@@ -139,11 +139,22 @@ function toReading(entry: PnpBattery): BatteryReading {
 	return { deviceLabel: label, percent, status: "ok" };
 }
 
+/**
+ * Best guess at a form factor from the name Windows shows. A Bluetooth device
+ * does advertise a class-of-device code, but the PnP property that carries it
+ * isn't exposed here, and the name is what the user recognises anyway.
+ */
 function kindOf(name: string): DeviceKind {
 	const value = name.toLowerCase();
 	if (/keyboard|keychron|azoth|kbd/.test(value)) return "keyboard";
 	if (/mouse|mx |trackball/.test(value)) return "mouse";
-	if (/headset|headphone|buds|earbud|airpods|hyperx|arctis/.test(value)) return "headset";
-	if (/controller|gamepad|dualsense|dualshock|xbox/.test(value)) return "gamepad";
+	if (/buds|earbud|airpods|pods\b|freebuds/.test(value)) return "earbuds";
+	if (/headset|headphone|arctis|cloud|wh-|beats|bose|jbl tune/.test(value)) return "headset";
+	if (/controller|gamepad|dualsense|dualshock|xbox|joy-con/.test(value)) return "gamepad";
+	if (/watch|band\b|fitbit|garmin/.test(value)) return "watch";
+	if (/ipad|tab\b|tablet/.test(value)) return "tablet";
+	if (/iphone|phone|pixel|galaxy s|oneplus|xperia/.test(value)) return "phone";
+	if (/speaker|nest|echo|sonos|soundbar|homepod|boom|flip\b/.test(value)) return "speaker";
+	if (/mic\b|microphone|solocast|quadcast|yeti|podcast|wave:/.test(value)) return "microphone";
 	return "other";
 }
