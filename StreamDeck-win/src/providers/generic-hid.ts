@@ -2,12 +2,14 @@ import type { Device as HidDeviceInfo } from "node-hid";
 import { hidDevices } from "./hid";
 import type { BatteryProvider, BatteryReading, DeviceKind, DiscoveredDevice } from "./types";
 import { hex4 } from "./types";
+import { isXboxPad } from "./xbox";
 
 /** Vendors a dedicated provider already enumerates, with its own battery protocol. */
 const CLAIMED_VENDORS = new Set([
 	0x046d, // Logitech — logitech.ts
 	0x0b05, // ASUSTek — asus.ts
 	0x054c, // Sony — dualsense.ts
+	0x1532, // Razer — razer.ts
 ]);
 
 /** The Stream Deck running this plugin is not a device anyone wants on a key. */
@@ -52,6 +54,8 @@ export class GenericHidProvider implements BatteryProvider {
 		for (const info of devices) {
 			if (!info.path) continue;
 			if (CLAIMED_VENDORS.has(info.vendorId) || info.vendorId === ELGATO) continue;
+			// Only the pad is claimed, not all of Microsoft's mice and keyboards.
+			if (isXboxPad(info)) continue;
 
 			const id = `${hex4(info.vendorId)}:${hex4(info.productId)}`;
 			const kind = kindOf(info);
@@ -118,14 +122,20 @@ function kindOf(info: HidDeviceInfo): DeviceKind {
 		if (info.usage === USAGE_GAMEPAD || info.usage === USAGE_JOYSTICK) return "gamepad";
 	}
 
+	// Model names, since a gaming peripheral rarely says what it is: an "Arctis
+	// Nova Pro" or a "Scimitar" names itself and nothing else.
 	const name = (info.product ?? "").toLowerCase();
-	if (/keyboard|keypad/.test(name)) return "keyboard";
-	if (/mouse|trackball/.test(name)) return "mouse";
-	if (/buds|earbud|airpods/.test(name)) return "earbuds";
-	if (/headset|headphone|cloud|arctis/.test(name)) return "headset";
-	if (/controller|gamepad|joystick/.test(name)) return "gamepad";
-	if (/mic\b|microphone|solocast|quadcast|yeti|wave/.test(name)) return "microphone";
-	if (/speaker|soundbar|monitor audio/.test(name)) return "speaker";
+	if (/keyboard|keypad|k[0-9]{2,3}\b|apex|strafe|huntsman|blackwidow|keychron/.test(name)) return "keyboard";
+	if (/mouse|trackball|rival|sensei|aerox|scimitar|harpoon|ironclaw|dark core|model o|model d/.test(name)) {
+		return "mouse";
+	}
+	if (/buds|earbud|airpods|hammerhead/.test(name)) return "earbuds";
+	if (/headset|headphone|cloud|arctis|virtuoso|void|kraken|barracuda|stealth|blackshark|nova\b/.test(name)) {
+		return "headset";
+	}
+	if (/controller|gamepad|joystick|wolverine|raiju/.test(name)) return "gamepad";
+	if (/mic\b|microphone|solocast|quadcast|yeti|wave|seiren|blue\b/.test(name)) return "microphone";
+	if (/speaker|soundbar|nommo|leviathan/.test(name)) return "speaker";
 	if (/watch|band\b/.test(name)) return "watch";
 
 	return "other";

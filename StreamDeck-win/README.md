@@ -21,7 +21,9 @@ cached for 10s (`src/providers/discovery.ts`).
 | `headsetcontrol.ts` | Every headset [HeadsetControl](https://github.com/Sapd/HeadsetControl) supports (~100 models across HyperX, SteelSeries, Corsair, Logitech, Razer…) | Shells out to the CLI, which has already reverse-engineered each headset's HID report. Names come from its output. |
 | `logitech.ts` | Every device paired to every Logitech receiver, plus directly-connected ones | HID++ 2.0 over `node-hid`. Product name and form factor are read from the device itself (feature `0x0005`), battery from `0x1004` Unified Battery, falling back to legacy `0x1000`. |
 | `asus.ts` | Any ASUSTek HID device that presents as a peripheral, named from its USB product descriptor | The ROG receiver's vendor collection. No public spec; the protocol was derived on real hardware and validated against Armoury Crate — see "Asus battery protocol". |
-| `dualsense.ts` | PlayStation 5 controllers (DualSense, DualSense Edge), over USB or Bluetooth | The pad's own input report — see "DualSense battery". Needed because neither OS route sees it: it pairs as Bluetooth Classic, so there's no GATT battery service for Windows to mirror, and over USB it's a plain HID gamepad. |
+| `razer.ts` | Razer wireless mice, keyboards and headsets | The OpenRazer control protocol: a 90-byte feature report carrying the power command class. No model list — anything that answers reports its level. **Unverified against hardware.** |
+| `xbox.ts` | Xbox Wireless Controllers over Bluetooth | Input report `0x04`, one byte of flags — four capacity steps, not a percentage. Dongle/USB is GIP, not HID, so it isn't covered. **Unverified against hardware.** |
+| `dualsense.ts` | PlayStation controllers: DualSense, DualSense Edge, DualShock 4, over USB or Bluetooth | The pad's own input report — see "DualSense battery". Needed because neither OS route sees it: it pairs as Bluetooth Classic, so there's no GATT battery service for Windows to mirror, and over USB it's a plain HID gamepad. |
 | `windows-bluetooth.ts` | Every paired, present Bluetooth device | The `DEVPKEY_Bluetooth_Battery` PnP property (the same number the Settings app shows), read via PowerShell. Vendor-independent, so it covers devices no dedicated provider knows about — but only Bluetooth **LE** devices with a GATT battery service have the property at all. Classic devices are still listed, without a level. |
 | `generic-hid.ts` | Everything else on HID, so nothing is invisible | Nothing — no battery protocol. Cable-connected devices are reported as mains powered; wireless ones (and anything named like a receiver) as unreadable, since they may well have a battery this plugin can't see. |
 
@@ -46,7 +48,10 @@ equality for names too short to match safely.
 - Stream Deck app (Windows 10+ or macOS 12+)
 - Node.js 20+ on the machine running Stream Deck
 - [HeadsetControl](https://github.com/Sapd/HeadsetControl/releases) on `PATH`
-  (for headsets) — or set `HEADSETCONTROL_PATH` to its full path
+  (for headsets) — or set `HEADSETCONTROL_PATH` to its full path. The property
+  inspector says whether it found it, and has a button that opens the releases
+  page via `streamDeck.system.openUrl` (the real browser — the inspector is a
+  webview with nowhere to put a page).
 
 ## Build & install
 
@@ -447,6 +452,72 @@ If a different ROG device doesn't answer, `node scripts/asus-cmd.mjs --sweep12`
 is the fastest way to find its equivalent sub-command: it prints every reply that
 isn't `ff aa`, and any byte matching the level Armoury Crate shows is flagged.
 
+### Brand coverage
+
+There is no general answer to "what's this peripheral's battery": Windows has
+no `Class=Battery` node for any of them and no battery property outside
+Bluetooth LE, so every family needs its own protocol. What that means per brand:
+
+| Brand | Headsets | Mice / keyboards | Controllers |
+|---|---|---|---|
+| Logitech | HeadsetControl | `logitech.ts` (HID++) | `logitech.ts` |
+| Razer | HeadsetControl, or `razer.ts` | `razer.ts` | — |
+| SteelSeries, Corsair, HyperX, Turtle Beach, Roccat, Astro | HeadsetControl | — | — |
+| Asus ROG | HeadsetControl | `asus.ts` | — |
+| Sony | — | — | `dualsense.ts` |
+| Xbox | — | — | `xbox.ts` (Bluetooth only) |
+| Anything on Bluetooth LE | `windows-bluetooth.ts` | `windows-bluetooth.ts` | `windows-bluetooth.ts` |
+
+HeadsetControl is the reason the headset column is nearly full: it has already
+reverse-engineered ~100 models across those brands, and this plugin lists
+whatever it reports. Installing it is the single biggest coverage win, which is
+why a missing binary is worth checking first when a headset shows no level.
+
+The gaps are mice and keyboards from SteelSeries, Corsair, Roccat and the rest.
+Each speaks its own vendor HID protocol, and unlike Razer's there is no single
+documented command that spans a vendor's range — the report differs per model.
+Adding one means probing that specific device (`scripts/hid-scan.mjs` and the
+`asus-*` tools exist for exactly that), so they're better added on demand by
+someone holding the hardware than guessed at here.
+
+**Xbox controllers** are covered over Bluetooth only (`xbox.ts`), and they
+report four steps rather than a percentage — see below. Through the Xbox
+Wireless dongle or a USB cable the pad speaks GIP, not HID, and its battery
+isn't in any report this can read; that route would need the WinRT
+`IGameControllerBatteryInfo` API, which isn't reachable from the plugin's
+Node process.
+
+**Nintendo** pads carry the level in a nibble of their full input report, but
+reaching that report needs a subcommand handshake rather than a single feature
+read, which is a bigger piece of work than it looks.
+
+### Xbox battery
+
+An Xbox pad sends its battery as its own input report, id `0x04`, carrying one
+byte of flags — the layout Linux's xpadneo driver decodes:
+
+```
+bit 7    online
+bit 4    charging
+bits 3-2 supply kind (internal, AA cells, rechargeable pack)
+bits 1-0 capacity: 0 critical, 1 low, 2 medium, 3 full
+```
+
+Note what isn't there: a percentage. The pad knows four steps, so the key shows
+10 / 35 / 70 / 100% with the word ("Medium") in the detail line, and the number
+sits still until the step changes. That's the device's resolution, not a bug in
+the reading.
+
+The report arrives when the level changes rather than on a schedule, so a quiet
+pad may not send one while discovery is listening — the provider asks for it as
+a feature report first, then listens briefly, and says "didn't send a battery
+report" rather than guessing. `scripts/xbox-probe.mjs` listens for longer and
+prints every report id it sees, which is the thing to run if a pad stays blank.
+
+Detection is by shape, not model: a Microsoft gamepad on a Bluetooth path. No
+product ids are listed, so an Xbox One S pad, a Series X|S pad and whatever
+ships next all take the same route.
+
 ### DualSense battery
 
 A DualSense reports its battery in the input report it already streams. One byte
@@ -509,7 +580,9 @@ src/
     headsetcontrol.ts        headsets, via the HeadsetControl CLI
     logitech.ts              HID++ 2.0 (name, type, unit id, battery)
     asus.ts                  ROG detection (battery not implemented)
-    dualsense.ts             PlayStation 5 pads, from their own input report
+    dualsense.ts             PlayStation pads (DualSense, DualShock 4), from their own input report
+    razer.ts                 Razer peripherals, via the OpenRazer control protocol
+    xbox.ts                  Xbox pads over Bluetooth, from input report 0x04
     generic-hid.ts           catch-all: lists remaining HID devices, mains vs unreadable
     windows-bluetooth.ts     Windows PnP Bluetooth battery property
   ui/battery-svg.ts          renders the key face as an SVG data URI (no canvas/image lib needed)
@@ -522,6 +595,8 @@ scripts/
   deploy.mjs                 `npm run deploy` — WSL -> installed plugin folder, then restarts it
   hid-scan.mjs               lists connected HID devices, for reverse-engineering new providers
   dualsense-probe.mjs        dumps DualSense input reports and decodes the battery byte
+  razer-probe.mjs            walks Razer interfaces and transaction ids, printing what answers
+  xbox-probe.mjs             listens for an Xbox pad's battery report and decodes its flags
   gen-icons.py               draws the plugin/action icons at Elgato's asset sizes
 ```
 

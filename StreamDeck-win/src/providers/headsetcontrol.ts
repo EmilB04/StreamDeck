@@ -34,6 +34,30 @@ function candidateBinaries(): string[] {
 	];
 }
 
+/** Where to send someone who hasn't got the tool yet. */
+export const HEADSETCONTROL_RELEASES = "https://github.com/Sapd/HeadsetControl/releases";
+
+/**
+ * Which binary is going to be used, or null when none of the candidates exist.
+ *
+ * The property inspector asks this so it can say whether headsets will report
+ * anything at all — a missing HeadsetControl is the single most common reason
+ * for a headset showing no level, and it looks identical to an unsupported
+ * device unless the panel says so.
+ */
+export async function findHeadsetControl(): Promise<string | null> {
+	for (const binary of candidateBinaries()) {
+		try {
+			await execFileAsync(binary, ["--help"], { timeout: TIMEOUT_MS });
+			return binary;
+		} catch (err: any) {
+			// Anything other than "no such file" means it's there and answered.
+			if (err?.code !== "ENOENT") return binary;
+		}
+	}
+	return null;
+}
+
 /**
  * Wireless headsets have no public API/SDK (NGENUITY and friends don't expose
  * one), so we shell out to HeadsetControl — https://github.com/Sapd/HeadsetControl —

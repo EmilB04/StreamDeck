@@ -4,6 +4,8 @@ import { GenericHidProvider } from "./generic-hid";
 import { HeadsetControlProvider } from "./headsetcontrol";
 import { log } from "./log";
 import { LogitechProvider } from "./logitech";
+import { RazerProvider } from "./razer";
+import { XboxProvider } from "./xbox";
 import type { BatteryProvider, DeviceKind, DiscoveredDevice } from "./types";
 import { WindowsBluetoothProvider } from "./windows-bluetooth";
 
@@ -16,7 +18,9 @@ const providers: BatteryProvider[] = [
 	new HeadsetControlProvider(),
 	new LogitechProvider(),
 	new AsusProvider(),
+	new RazerProvider(),
 	new DualSenseProvider(),
+	new XboxProvider(),
 	new WindowsBluetoothProvider(),
 	// Last: its entries are dropped wherever a real provider covers the same
 	// hardware (see mergeGeneric).

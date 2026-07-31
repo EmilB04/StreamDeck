@@ -154,6 +154,36 @@
 			text-align: center;
 		}
 
+		/* Supported-device list: the category carries the scanning, so it sits on
+		   its own line above the brands rather than in a cramped left column. */
+		.devices {
+			margin: 0;
+		}
+		.devices dt {
+			margin-top: 8px;
+			color: var(--bright);
+			font-size: 10px;
+			font-weight: 600;
+			text-transform: uppercase;
+			letter-spacing: 0.06em;
+		}
+		.devices dt:first-child {
+			margin-top: 0;
+		}
+		.devices dd {
+			margin: 2px 0 0 0;
+		}
+		.tag {
+			padding: 0 4px;
+			border: 1px solid var(--accent);
+			border-radius: 3px;
+			color: var(--accent);
+			font-size: 9px;
+			text-transform: uppercase;
+			letter-spacing: 0.06em;
+			white-space: nowrap;
+		}
+
 		/* Colours read as a set, not as six unrelated rows. */
 		.swatches {
 			display: flex;
@@ -343,13 +373,63 @@
 		</div>
 	</sdpi-item>
 
+	<div class="section">Headset support</div>
+
+	<span class="hint" id="tool-checking">Checking whether HeadsetControl is installed…</span>
+
+	<!-- Missing: the download is the point of the section, so it leads. -->
+	<div id="tool-missing" hidden>
+		<sdpi-item label="HeadsetControl">
+			<sdpi-button class="get-headsetcontrol">Download HeadsetControl</sdpi-button>
+		</sdpi-item>
+		<span class="hint">
+			Not installed. Headsets can't report a level without it; every other kind
+			of device is unaffected.
+		</span>
+	</div>
+
+	<!-- Installed: nothing to do, so the download folds away. -->
+	<div id="tool-installed" hidden>
+		<span class="hint" id="tool-path">Installed — headsets report their level.</span>
+		<details class="more">
+		<summary>Want to re-install?</summary>
+		<div>
+			<p>Worth doing if a headset stopped reporting after an update, or if yours is newer than your copy of the tool.</p>
+			<sdpi-button class="get-headsetcontrol">Open the releases page</sdpi-button>
+		</div>
+		</details>
+	</div>
+
 	<div class="section">About</div>
+
+	<details class="more">
+	<summary>Which devices report a level</summary>
+	<div>
+		<dl class="devices">
+			<dt>Headsets</dt>
+			<dd>HyperX, SteelSeries, Corsair, Logitech, Razer, Turtle Beach, Roccat, Astro — around 100 models. Needs <b>HeadsetControl</b> installed and on your PATH; without it, no headset reports a level.</dd>
+
+			<dt>Mice &amp; keyboards</dt>
+			<dd>Logitech, over its own receivers or paired directly. Asus ROG. Razer&nbsp;<span class="tag">new</span></dd>
+
+			<dt>Controllers</dt>
+			<dd>PlayStation: DualSense, DualSense Edge, DualShock 4&nbsp;<span class="tag">new</span> — over USB or Bluetooth. Xbox&nbsp;<span class="tag">new</span> — Bluetooth only, and in four steps rather than a percentage.</dd>
+
+			<dt>Bluetooth LE</dt>
+			<dd>Phones, watches, styluses, and anything else that publishes a battery service — Windows reads it, so no brand list applies.</dd>
+
+			<dt>Everything else</dt>
+			<dd>Still listed, without a level. Cable-powered devices show a plug instead.</dd>
+		</dl>
+		<p><b>Not covered:</b> SteelSeries, Corsair and Roccat mice and keyboards — each model speaks its own protocol. Xbox pads through the wireless dongle or a cable. Nintendo pads. AirPods, which report over Apple's own protocol rather than Bluetooth's.</p>
+		<p>Entries marked <span class="tag">new</span> were written from published protocol documentation but haven't been tried on the hardware yet.</p>
+	</div>
+	</details>
 
 	<details class="more">
 	<summary>How devices are found</summary>
 	<div>
-		<p>Nothing is hard-coded per model: the plugin enumerates what this machine can see, so the list is whatever is plugged in or paired right now.</p>
-		<p>Levels come from <b>HeadsetControl</b> for gaming headsets (a separate tool, and it must be on your PATH), <b>HID++</b> for Logitech, the <b>input report</b> for PlayStation 5 pads, and the <b>Windows battery property</b> for Bluetooth LE devices. Anything else is listed without a level.</p>
+		<p>Nothing is hard-coded per model: the plugin enumerates what this machine can see, so the list is whatever is plugged in or paired right now. A device released tomorrow works if it speaks a protocol above.</p>
 		<p>Bluetooth LE devices report a level and nothing else, so for those the bolt appears once the level is seen rising. Wireless levels are coarse — many report in steps of 10% — so expect the number to jump.</p>
 	</div>
 	</details>
@@ -425,6 +505,34 @@
 		const askForStatus = () => send({ event: "getStatus" });
 		askForStatus();
 		setInterval(askForStatus, 3000);
+
+		// --- HeadsetControl: the one dependency a user installs themselves, and the
+		// usual reason a headset shows no level. Which half of this shows depends
+		// on whether they already have it — a download button is only useful to
+		// someone who needs to download something.
+		const toolChecking = document.getElementById("tool-checking");
+		const toolMissing = document.getElementById("tool-missing");
+		const toolInstalled = document.getElementById("tool-installed");
+		const toolPath = document.getElementById("tool-path");
+
+		client.sendToPropertyInspector?.subscribe?.((message) => {
+			if (message?.payload?.event !== "getHeadsetTool") return;
+
+			const { installed, binary } = message.payload;
+			toolChecking.hidden = true;
+			toolMissing.hidden = installed;
+			toolInstalled.hidden = !installed;
+
+			if (installed) {
+				toolPath.textContent = `Installed — headsets report their level. Using ${binary}.`;
+			}
+		});
+
+		for (const button of document.querySelectorAll(".get-headsetcontrol")) {
+			button.addEventListener("click", () => send({ event: "openHeadsetTool" }));
+		}
+
+		send({ event: "getHeadsetTool" });
 	</script>
 </body>
 </html>

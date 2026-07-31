@@ -9,6 +9,7 @@ import type {
 	WillDisappearEvent,
 } from "@elgato/streamdeck";
 import { discovery } from "../providers/discovery";
+import { findHeadsetControl, HEADSETCONTROL_RELEASES } from "../providers/headsetcontrol";
 import type { BatteryReading, DeviceKind, DiscoveredDevice } from "../providers/types";
 import { batteryKeyImage, noticeKeyImage } from "../ui/battery-svg";
 import { listApps } from "./apps";
@@ -284,6 +285,17 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 		}
 		if (ev.payload?.event === "getApps") {
 			await this.sendApps(ev.action, ev.payload?.isRefresh === true);
+			return;
+		}
+		if (ev.payload?.event === "getHeadsetTool") {
+			const binary = await findHeadsetControl();
+			await streamDeck.ui.sendToPropertyInspector({ event: "getHeadsetTool", installed: binary !== null, binary });
+			return;
+		}
+		if (ev.payload?.event === "openHeadsetTool") {
+			// Stream Deck opens it in the real browser; the inspector is a webview
+			// with no place to put a page.
+			await streamDeck.system.openUrl(HEADSETCONTROL_RELEASES);
 			return;
 		}
 		if (ev.payload?.event !== "getDevices") return;

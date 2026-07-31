@@ -5,11 +5,35 @@ import { hex4, slug } from "./types";
 
 const VENDOR_SONY = 0x054c;
 
-/** PlayStation 5 controllers. Both speak the same input report. */
-const PRODUCTS = new Map([
-	[0x0ce6, "DualSense Wireless Controller"],
-	[0x0df2, "DualSense Edge Wireless Controller"],
+/**
+ * PlayStation controllers, and which report layout each speaks. The PS5 pads
+ * share one; the PS4 pads share an older one that packs the same two facts
+ * into a single nibble pair at a different offset.
+ */
+type PadFamily = "dualsense" | "dualshock4";
+
+const PRODUCTS = new Map<number, { label: string; family: PadFamily }>([
+	[0x0ce6, { label: "DualSense Wireless Controller", family: "dualsense" }],
+	[0x0df2, { label: "DualSense Edge Wireless Controller", family: "dualsense" }],
+	[0x05c4, { label: "DualShock 4 Wireless Controller", family: "dualshock4" }],
+	[0x09cc, { label: "DualShock 4 Wireless Controller", family: "dualshock4" }],
+	[0x0ba0, { label: "DualShock 4 USB Wireless Adaptor", family: "dualshock4" }],
 ]);
+
+/**
+ * DualShock 4 input reports: 0x01 over USB, 0x11 over Bluetooth (which carries
+ * two extra header bytes). One byte holds both the level and whether the cable
+ * is in — the same idea as the PS5's status byte, in a different place.
+ *
+ *   [0..3] level, 0-10 on battery and 0-11 while charging
+ *   [4]    cable state
+ */
+const REPORT_DS4_USB = 0x01;
+const REPORT_DS4_BT = 0x11;
+const STATUS_INDEX_DS4_USB = 30;
+const STATUS_INDEX_DS4_BT = 32;
+const DS4_CABLE = 0x10;
+const DS4_LEVEL = 0x0f;
 
 /**
  * Input report ids. Over USB the pad sends 0x01 with the full state; over
@@ -76,7 +100,8 @@ export class DualSenseProvider implements BatteryProvider {
 		for (const info of devices) {
 			if (!info.path || !PRODUCTS.has(info.productId)) continue;
 
-			const label = (info.product ?? "").trim() || PRODUCTS.get(info.productId)!;
+			const product = PRODUCTS.get(info.productId)!;
+			const label = (info.product ?? "").trim() || product.label;
 			const device: DiscoveredDevice = {
 				// The serial number is the pad's MAC address over Bluetooth, so it
 				// survives a reconnect and a reboot. USB doesn't always report one.
@@ -85,10 +110,14 @@ export class DualSenseProvider implements BatteryProvider {
 				label,
 				kind: "gamepad",
 				supportsBattery: true,
-				locator: { productId: info.productId, serialNumber: info.serialNumber ?? "" },
+				locator: {
+					productId: info.productId,
+					serialNumber: info.serialNumber ?? "",
+					family: product.family,
+				},
 			};
 
-			device.reading = await this.readFrom(info, label);
+			device.reading = await this.readFrom(info, label, product.family);
 			found.push(device);
 		}
 
@@ -105,7 +134,7 @@ export class DualSenseProvider implements BatteryProvider {
 				detail: "Controller not connected",
 			};
 		}
-		return this.readFrom(info, device.label);
+		return this.readFrom(info, device.label, familyOf(info.productId));
 	}
 
 	/** Finds the pad again by serial, falling back to the product id. */
@@ -120,8 +149,8 @@ export class DualSenseProvider implements BatteryProvider {
 		return candidates.find((d) => serialNumber !== "" && d.serialNumber === serialNumber) ?? candidates[0];
 	}
 
-	private async readFrom(info: HidDeviceInfo, label: string): Promise<BatteryReading> {
-		const status = await this.readStatusByte(info);
+	private async readFrom(info: HidDeviceInfo, label: string, family: PadFamily): Promise<BatteryReading> {
+		const status = await this.readStatusByte(info, family);
 		if (status === null) {
 			return {
 				deviceLabel: label,
@@ -130,14 +159,14 @@ export class DualSenseProvider implements BatteryProvider {
 				detail: "Controller didn't send a full input report",
 			};
 		}
-		return decodeStatus(status, label);
+		return family === "dualsense" ? decodeStatus(status, label) : decodeDualShock4(status, label);
 	}
 
 	/**
 	 * Opens the pad, waits for a report that actually carries the battery, and
 	 * returns its status byte.
 	 */
-	private async readStatusByte(info: HidDeviceInfo): Promise<number | null> {
+	private async readStatusByte(info: HidDeviceInfo, family: PadFamily): Promise<number | null> {
 		const HID = await loadHid();
 		if (!HID) return null;
 
@@ -154,12 +183,13 @@ export class DualSenseProvider implements BatteryProvider {
 				if (!report?.length) continue;
 
 				const bytes = Array.from(report);
-				const index = statusIndexOf(bytes, overBluetooth);
+				const index = statusIndexOf(bytes, overBluetooth, family);
 				if (index !== null && bytes.length > index) return bytes[index];
 
 				// A Bluetooth pad in compatibility mode pads its short report out to
 				// the full length, so length alone can't tell them apart — the report
-				// id can. Ask for the calibration data once; that flips it to 0x31.
+				// id can. Ask for the calibration data once; that flips it to the full
+				// report (0x31 on a DualSense, 0x11 on a DualShock 4).
 				if (overBluetooth && !askedForFullReports) {
 					askedForFullReports = true;
 					try {
@@ -185,10 +215,40 @@ export class DualSenseProvider implements BatteryProvider {
 	}
 }
 
+function familyOf(productId: number): PadFamily {
+	return PRODUCTS.get(productId)?.family ?? "dualsense";
+}
+
 /** Which byte holds the status, or null when this report doesn't carry one. */
-function statusIndexOf(bytes: number[], overBluetooth: boolean): number | null {
+function statusIndexOf(bytes: number[], overBluetooth: boolean, family: PadFamily): number | null {
+	if (family === "dualshock4") {
+		if (overBluetooth) return bytes[0] === REPORT_DS4_BT ? STATUS_INDEX_DS4_BT : null;
+		return bytes[0] === REPORT_DS4_USB ? STATUS_INDEX_DS4_USB : null;
+	}
+
 	if (overBluetooth) return bytes[0] === REPORT_BT ? STATUS_INDEX_BT : null;
 	return bytes[0] === REPORT_USB ? STATUS_INDEX_USB : null;
+}
+
+/**
+ * DualShock 4: one nibble for the level, one bit for the cable.
+ *
+ * The scale changes with the cable — 0-10 on battery, 0-11 while charging —
+ * which is why the two cases divide by different totals. Unverified against
+ * hardware; the layout is the one Linux's hid-sony driver uses.
+ */
+function decodeDualShock4(status: number, label: string): BatteryReading {
+	const level = status & DS4_LEVEL;
+	const cable = (status & DS4_CABLE) !== 0;
+
+	if (cable) {
+		if (level >= 11) {
+			return { deviceLabel: label, percent: 100, status: "charging", detail: "Charge complete" };
+		}
+		return { deviceLabel: label, percent: Math.min(100, Math.round((level / 11) * 100)), status: "charging" };
+	}
+
+	return { deviceLabel: label, percent: Math.min(100, Math.round((level / 10) * 100)), status: "ok" };
 }
 
 /**
