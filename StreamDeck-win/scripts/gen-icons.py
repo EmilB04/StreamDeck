@@ -5,11 +5,17 @@ Run: python3 scripts/gen-icons.py
 Everything is drawn on a supersampled canvas and downscaled with LANCZOS, since
 Pillow does no anti-aliasing of its own and these are looked at down to 20px.
 
-Sizes follow Elgato's asset spec:
-  marketplace     288  (@2x 576)  the store / plugin listing
+Sizes and styles follow Elgato's asset guidelines:
+  marketplace     288  (@2x 576)  the icon inside the Stream Deck app
+  store icon      256  (@2x 512)  uploaded separately in Maker Console
   category-icon    28  (@2x  56)  the group header in the actions list
-  action icon      20  (@2x  40)  the action's own row, on a transparent ground
+  action icon      20  (@2x  40)  the action's own row
   key image        72  (@2x 144)  what a key shows before the first reading
+
+The action and category icons are monochrome white on a transparent ground,
+which the guidelines require: they sit in Stream Deck's own lists, where a
+coloured icon would fight the surrounding chrome. Colour is kept for the two
+icons that stand alone — the app icon and the store listing.
 """
 from pathlib import Path
 from PIL import Image, ImageDraw
@@ -22,6 +28,7 @@ FG = (235, 235, 235, 255)
 GREEN = (46, 204, 113, 255)
 BOLT = (85, 255, 127, 255)
 MUTED = (90, 95, 102, 255)
+WHITE = (255, 255, 255, 255)
 
 SS = 8  # supersampling factor
 
@@ -39,11 +46,14 @@ def bolt_points(cx, cy, h):
     ]
 
 
-def battery(size, *, background, fill_ratio, with_bolt):
+def battery(size, *, background, fill_ratio, with_bolt, monochrome=False, with_arrow=False):
     """A horizontal battery, optionally on a rounded-square background."""
     s = size * SS
     img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
+
+    outline = FG if not monochrome else WHITE
+    level = GREEN if not monochrome else WHITE
 
     if background:
         d.rounded_rectangle([0, 0, s - 1, s - 1], radius=s * 0.22, fill=BG)
@@ -56,19 +66,19 @@ def battery(size, *, background, fill_ratio, with_bolt):
     x1, y1 = x0 + body_w, y0 + body_h
 
     stroke = max(1, int(s * 0.035))
-    d.rounded_rectangle([x0, y0, x1, y1], radius=s * 0.05, outline=FG, width=stroke)
+    d.rounded_rectangle([x0, y0, x1, y1], radius=s * 0.05, outline=outline, width=stroke)
 
     cap_h = body_h * 0.42
     d.rounded_rectangle(
         [x1, y0 + (body_h - cap_h) / 2, x1 + cap_w, y0 + (body_h - cap_h) / 2 + cap_h],
         radius=s * 0.015,
-        fill=FG,
+        fill=outline,
     )
 
     pad = stroke * 1.6
     if fill_ratio > 0:
         fill_w = (body_w - 2 * pad) * fill_ratio
-        d.rounded_rectangle([x0 + pad, y0 + pad, x0 + pad + fill_w, y1 - pad], radius=s * 0.02, fill=GREEN)
+        d.rounded_rectangle([x0 + pad, y0 + pad, x0 + pad + fill_w, y1 - pad], radius=s * 0.02, fill=level)
     else:
         # The key image is only ever seen before a real reading arrives, so it
         # must not look like a level. A dash says "nothing yet".
@@ -77,6 +87,14 @@ def battery(size, *, background, fill_ratio, with_bolt):
             fill=MUTED,
             width=max(2, int(s * 0.04)),
         )
+
+    if with_arrow:
+        # Marks the "lowest" action apart from the single-device one: the same
+        # battery, with a downward chevron where the bolt would go.
+        cx, cy = x0 + body_w * 0.5, (y0 + y1) / 2
+        arm = body_h * 0.42
+        d.line([cx - arm, cy - arm * 0.45, cx, cy + arm * 0.55], fill=outline, width=stroke)
+        d.line([cx + arm, cy - arm * 0.45, cx, cy + arm * 0.55], fill=outline, width=stroke)
 
     if with_bolt:
         # Sits over the level, outlined in the background colour so it stays
@@ -95,14 +113,27 @@ def save(name, size, **kw):
         print(f"wrote {out.relative_to(SDPLUGIN)} ({size * scale}px)")
 
 
-# Store listing: the biggest one, so it can carry the bolt and a filled level.
+# The icon shown inside the Stream Deck app.
 save("imgs/plugin/marketplace", 288, background=True, fill_ratio=0.78, with_bolt=True)
 
-# Actions-list group header: the same mark, minus a bolt that would be mud at 28px.
-save("imgs/plugin/category-icon", 28, background=True, fill_ratio=0.78, with_bolt=False)
+# Actions-list group header: monochrome, per the icon guidelines.
+save("imgs/plugin/category-icon", 28, background=False, fill_ratio=0.78, with_bolt=False, monochrome=True)
 
-# The action's row: transparent, so it sits on the list's own background.
-save("imgs/actions/battery-status/icon", 20, background=False, fill_ratio=0.78, with_bolt=False)
+# The action's own row: monochrome white on transparent, same rule.
+save("imgs/actions/battery-status/icon", 20, background=False, fill_ratio=0.78, with_bolt=False, monochrome=True)
 
 # What a key shows until the first reading lands.
 save("imgs/actions/battery-status/key", 72, background=True, fill_ratio=0, with_bolt=False)
+
+# The "Lowest battery" action: same mark, chevron instead of a level.
+save("imgs/actions/lowest-battery/icon", 20, background=False, fill_ratio=0, with_bolt=False,
+     monochrome=True, with_arrow=True)
+save("imgs/actions/lowest-battery/key", 72, background=True, fill_ratio=0, with_bolt=False, with_arrow=True)
+
+# Marketplace listing icon, uploaded in Maker Console rather than shipped in the
+# package — hence a folder outside the .sdPlugin.
+for store_size in (256, 512):
+    out = ROOT / "store" / f"app-icon-{store_size}.png"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    battery(store_size, background=True, fill_ratio=0.78, with_bolt=True).save(out)
+    print(f"wrote {out.relative_to(ROOT)} ({store_size}px)")

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8" />
+	<title>Lowest Battery</title>
+	<script src="https://sdpi-components.dev/releases/v3/sdpi-components.js"></script>
+	<link rel="stylesheet" href="inspector.css" />
+</head>
+<body>
+	<div class="status" id="status" data-state="idle">
+		<div class="status-name" id="status-name">Nothing yet</div>
+		<div class="status-level" id="status-level">—</div>
+		<div class="status-state" id="status-state">Waiting for a reading</div>
+	</div>
+
+	<div class="section">Watching</div>
+
+	<sdpi-item label="Devices">
+		<sdpi-select setting="watch" default="peripherals">
+			<option value="peripherals">Peripherals only</option>
+			<option value="everything">Everything detected</option>
+		</sdpi-select>
+	</sdpi-item>
+
+	<span class="hint">The key follows whichever of these has least charge left, and names it.</span>
+
+	<details class="more">
+	<summary>About what counts</summary>
+	<div>
+		<p><b>Peripherals only</b> leaves out phones, tablets and watches. They have their own chargers and their own warnings, and counting them means the key spends its time reporting a phone instead of the headset that's about to go quiet mid-call.</p>
+		<p>Only live readings count. A device that's switched off can't win with the level it had yesterday, and a mains-powered one has nothing to compare.</p>
+		<p>No extra scanning happens for this: every device's level is already collected, so this only chooses between readings that exist.</p>
+	</div>
+	</details>
+
+	<div class="section">Updates</div>
+
+	<sdpi-item label="Check every">
+		<sdpi-range setting="refreshSeconds" min="10" max="300" step="5" default="60" showlabels>
+			<span slot="min">10s</span>
+			<span slot="max">5m</span>
+		</sdpi-range>
+		<span class="value" data-for="refreshSeconds"></span>
+	</sdpi-item>
+
+	<sdpi-item label="Timing">
+		<sdpi-select setting="pollMode" default="fixed">
+			<option value="fixed">Keep that interval</option>
+			<option value="adaptive">Adapt to the battery</option>
+		</sdpi-select>
+	</sdpi-item>
+
+	<div class="section">On press</div>
+
+	<sdpi-item label="Opens">
+		<sdpi-select
+			setting="pressTarget"
+			datasource="getApps"
+			show-refresh
+			hot-reload
+			placeholder="Reading the Start menu…"
+			loading="Reading the Start menu…"
+		></sdpi-select>
+	</sdpi-item>
+
+	<sdpi-item label="Or this path">
+		<sdpi-textfield setting="pressCustomTarget" placeholder="C:\…\app.exe, or steam://"></sdpi-textfield>
+	</sdpi-item>
+
+	<span class="hint">A path here wins over the list. A press also re-reads every device.</span>
+
+	<div class="section">Key face</div>
+
+	<sdpi-item label="Meter">
+		<sdpi-select setting="style" default="bar">
+			<option value="bar">Battery bar</option>
+			<option value="ring">Ring around the key</option>
+			<option value="text">Percentage only</option>
+		</sdpi-select>
+	</sdpi-item>
+
+	<sdpi-item label="Show">
+		<sdpi-checkbox setting="showIcon" label="Device icon"></sdpi-checkbox>
+		<sdpi-checkbox setting="showPercent" default="true" label="Percentage"></sdpi-checkbox>
+		<sdpi-checkbox setting="showName" default="true" label="Which device"></sdpi-checkbox>
+	</sdpi-item>
+
+	<sdpi-item label="Deck title">
+		<sdpi-select setting="titleMode" default="none">
+			<option value="none">Leave my title alone</option>
+			<option value="device">Device name</option>
+			<option value="percent">Percentage</option>
+		</sdpi-select>
+	</sdpi-item>
+
+	<span class="hint">Keep "which device" on: a low number tells you something needs charging, but not what.</span>
+
+	<div class="section">Levels</div>
+
+	<sdpi-item label="Low up to">
+		<sdpi-range setting="lowThreshold" min="0" max="50" step="1" default="20" showlabels>
+			<span slot="min">0%</span>
+			<span slot="max">50%</span>
+		</sdpi-range>
+		<span class="value" data-for="lowThreshold"></span>
+	</sdpi-item>
+
+	<sdpi-item label="Medium up to">
+		<sdpi-range setting="mediumThreshold" min="10" max="90" step="1" default="50" showlabels>
+			<span slot="min">10%</span>
+			<span slot="max">90%</span>
+		</sdpi-range>
+		<span class="value" data-for="mediumThreshold"></span>
+	</sdpi-item>
+
+	<sdpi-item label="Warn below">
+		<sdpi-range setting="alertBelow" min="0" max="50" step="1" default="0" showlabels>
+			<span slot="min">Off</span>
+			<span slot="max">50%</span>
+		</sdpi-range>
+		<span class="value" data-for="alertBelow"></span>
+	</sdpi-item>
+
+	<div class="section">Colours</div>
+
+	<sdpi-item label="Levels">
+		<div class="swatches">
+			<label><sdpi-color setting="colorLow" default="#e35d5d"></sdpi-color>Low</label>
+			<label><sdpi-color setting="colorMedium" default="#e3b34d"></sdpi-color>Medium</label>
+			<label><sdpi-color setting="colorHigh" default="#2ecc71"></sdpi-color>High</label>
+		</div>
+	</sdpi-item>
+
+	<sdpi-item label="Key">
+		<div class="swatches">
+			<label><sdpi-color setting="colorCharging" default="#55ff7f"></sdpi-color>Charging</label>
+			<label><sdpi-color setting="colorForeground" default="#eaeaea"></sdpi-color>Outline</label>
+			<label><sdpi-color setting="colorBackground" default="#000000"></sdpi-color>Background</label>
+		</div>
+	</sdpi-item>
+
+	<script>
+		const client = SDPIComponents.streamDeckClient;
+
+		const send = (payload) => {
+			if (typeof client.sendToPlugin === "function") client.sendToPlugin(payload);
+			else client.send("sendToPlugin", payload);
+		};
+
+		// Live readouts under the sliders. The component only commits on release,
+		// so the continuous value comes from the range inside its shadow root.
+		const UNITS = {
+			refreshSeconds: (v) => (v >= 60 && v % 60 === 0 ? `${v / 60} min` : `${v} sec`),
+			lowThreshold: (v) => `${v}%`,
+			mediumThreshold: (v) => `${v}%`,
+			alertBelow: (v) => (v === 0 ? "Off" : `${v}%`),
+		};
+
+		for (const range of document.querySelectorAll("sdpi-range[setting]")) {
+			const setting = range.getAttribute("setting");
+			const output = document.querySelector(`.value[data-for="${setting}"]`);
+			if (!output) continue;
+
+			const format = UNITS[setting] ?? ((v) => `${v}`);
+			const show = (value) => {
+				const number = Number(value);
+				if (Number.isFinite(number)) output.textContent = format(number);
+			};
+
+			range.addEventListener("valuechange", () => show(range.value));
+			range.addEventListener("input", (ev) => show(ev.composedPath()[0]?.valueAsNumber));
+			show(range.value ?? range.getAttribute("default"));
+		}
+
+		// What the key is showing, answered from the reading the plugin already drew.
+		const status = document.getElementById("status");
+		const statusName = document.getElementById("status-name");
+		const statusLevel = document.getElementById("status-level");
+		const statusState = document.getElementById("status-state");
+
+		client.sendToPropertyInspector?.subscribe?.((message) => {
+			if (message?.payload?.event !== "getStatus") return;
+
+			const value = message.payload.status;
+			if (!value) {
+				status.dataset.state = "idle";
+				statusName.textContent = "Nothing yet";
+				statusLevel.textContent = "—";
+				statusState.textContent = "Waiting for a reading";
+				return;
+			}
+
+			status.dataset.state = value.tone ?? "idle";
+			statusName.textContent = value.label;
+			statusLevel.textContent = value.percent === null ? "—" : `${value.percent}%`;
+			statusState.textContent = value.state;
+		});
+
+		const askForStatus = () => send({ event: "getStatus" });
+		askForStatus();
+		setInterval(askForStatus, 3000);
+	</script>
+</body>
+</html>

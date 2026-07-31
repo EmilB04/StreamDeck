@@ -87,6 +87,58 @@ plugin's `node.exe` — Stream Deck respawns it within a couple of seconds.
 `npm run sync-deps` must still be run **on Windows**: it installs node-hid's
 native binary, and the one WSL produces won't load inside Stream Deck.
 
+## Publishing to Marketplace
+
+```sh
+npx streamdeck validate com.emilberglund.batterymonitor.sdPlugin
+npx streamdeck pack com.emilberglund.batterymonitor.sdPlugin
+```
+
+`pack` validates first and writes a `.streamDeckPlugin`, which is uploaded in
+[Maker Console](https://docs.elgato.com/maker-console/managing-products/) along
+with an app icon and gallery images. Review takes 4–10 business days.
+
+What's already prepared for that:
+
+- **`.sdignore`** keeps development leftovers out of the package — logs, editor
+  state, source maps, `bin/scan.js`, and node-hid's prebuilt binaries for the
+  platforms this doesn't declare. 264 files / 6.2 MB became 217 / 3.9 MB.
+- **Action and category icons are monochrome white on transparent**, which the
+  [icon guidelines](https://docs.elgato.com/guidelines/stream-deck/plugins/)
+  require for anything shown in Stream Deck's own lists. Colour is kept for the
+  app icon and the store listing, which stand alone.
+- **`store/app-icon-256.png` and `-512.png`** are the Marketplace listing icon,
+  which is a separate asset from the manifest's — it's uploaded in Maker
+  Console, so it lives outside the `.sdPlugin` folder and never ships.
+- **Version `1.0.0.0`**, and **macOS removed from the manifest**: the HID
+  providers there would need Input Monitoring permission and none of it has
+  ever been run, so claiming a platform a reviewer can find dead is worse than
+  shipping Windows-only and adding mac once it's tested.
+
+Still open before submitting:
+
+- **Razer, Xbox and DualShock 4 are unverified** against hardware. They're
+  marked in the property inspector, but public users will hit that code.
+- Gallery images and a support URL still have to be produced — neither can come
+  from the repo.
+- Optional: **DRM** needs `SDKVersion: 3` and `Software.MinimumVersion: 6.9`,
+  which encrypts the package at the cost of a runtime-readable manifest.
+
+## Actions
+
+**Device Battery** — one device on one key, chosen in the property inspector.
+
+**Lowest Battery** — whichever detected device has least charge, named on the
+key. Five keys each showing a healthy number don't answer "is anything about to
+die on me"; this one does. It reads nothing itself: discovery has already
+collected every level, so it only chooses between readings that exist.
+
+Only live readings are eligible — a device that's off can't win with the level
+it had yesterday, and a mains-powered one has nothing to compare. **Peripherals
+only** (the default) leaves out phones, tablets and watches, which have their
+own chargers and their own warnings; on the dev machine that's the difference
+between reporting a keyboard at 81% and a phone at 56%.
+
 ## Customizing the key
 
 Everything below is per-key, in the property inspector, which is grouped as
@@ -569,6 +621,7 @@ src/
   scan.ts                    `npm run scan` — prints discovery results to a terminal
   actions/
     battery-status.ts        the "Device Battery" action (polling, rendering, PI datasource)
+    lowest-battery.ts        the "Lowest Battery" action — picks the emptiest device
     settings.ts              per-key settings shape, defaults and version migrations
     apps.ts                  lists installed applications for the picker (Get-StartApps)
     launch.ts                opens the app/file/URL a press is pointed at
@@ -589,6 +642,8 @@ src/
 com.emilberglund.batterymonitor.sdPlugin/
   manifest.json
   ui/battery-status.html     property inspector (device list is a plugin datasource)
+  ui/lowest-battery.html     property inspector for the lowest-battery action
+  ui/inspector.css           styling shared by both inspectors
   bin/                       build output (gitignored)
 scripts/
   sync-runtime-deps.mjs      installs node-hid into the .sdPlugin folder

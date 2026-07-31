@@ -75,6 +75,25 @@ export type BatterySettings = {
 	settingsVersion?: number;
 };
 
+/** Which devices the "Lowest battery" action counts. */
+export type WatchScope = "peripherals" | "everything";
+
+export type LowestBatterySettings = BatterySettings & {
+	watch?: WatchScope;
+};
+
+/**
+ * Kinds left out of "peripherals". A phone or a watch has its own charger and
+ * its own reminders; counting them means the key spends most of its time
+ * reporting a phone that is about to be plugged in anyway, and never mentions
+ * the headset that's about to die mid-call.
+ */
+const PERSONAL_KINDS = new Set<DeviceKind>(["phone", "tablet", "watch"]);
+
+export function watchIncludes(scope: WatchScope, kind: DeviceKind): boolean {
+	return scope === "everything" || !PERSONAL_KINDS.has(kind);
+}
+
 /**
  * Floor on the poll interval. A scan takes ~3s and discovery caches its result
  * for 10s, so anything faster than this would spend the extra polls re-drawing
@@ -90,6 +109,7 @@ export const SETTINGS_VERSION = 5;
 
 export const DEFAULTS = {
 	refreshSeconds: 60,
+	watch: "peripherals" as WatchScope,
 	pollMode: "fixed" as PollMode,
 	powerSource: "auto" as PowerSource,
 	showLastKnown: true,

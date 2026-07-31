@@ -1,0 +1,24 @@
+# Keeps development leftovers out of the .streamDeckPlugin package.
+# gitignore syntax; see `streamdeck pack`.
+
+# Written by the plugin at runtime, on the user's own machine.
+logs/
+
+# Editor and tooling state that has no business shipping.
+.claude/
+*.map
+
+# `npm run scan` is a developer command; the plugin never loads it.
+bin/scan.js
+node_modules/.bin/
+
+# node-hid ships a prebuilt binary per platform. The manifest declares Windows
+# only, so the rest are dead weight in the download — roughly 4 MB of it.
+node_modules/node-hid/prebuilds/HID-darwin-*/
+node_modules/node-hid/prebuilds/HID-linux-*/
+node_modules/node-hid/prebuilds/HID_hidraw-*/
+
+# Build inputs for the native module: needed to compile it, never to run it.
+node_modules/node-hid/src/
+node_modules/node-hid/binding.gyp
+node_modules/**/*.md

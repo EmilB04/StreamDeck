@@ -2,7 +2,7 @@
 	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
 	"Name": "Battery Monitor",
 	"UUID": "com.emilberglund.batterymonitor",
-	"Version": "0.1.0.0",
+	"Version": "1.0.0.0",
 	"Author": "Emil Berglund",
 	"Description": "Multi-purpose plugin. Starts with battery monitoring: scans the machine for wireless peripherals (headsets, Logitech HID++, Asus, Bluetooth) and shows the battery level of the one you pick.",
 	"Icon": "imgs/plugin/marketplace",
@@ -17,10 +17,6 @@
 		{
 			"Platform": "windows",
 			"MinimumVersion": "10"
-		},
-		{
-			"Platform": "mac",
-			"MinimumVersion": "12"
 		}
 	],
 	"Nodejs": {
@@ -34,10 +30,29 @@
 			"Icon": "imgs/actions/battery-status/icon",
 			"Tooltip": "Shows the battery level of a wireless device detected on this computer.",
 			"PropertyInspectorPath": "ui/battery-status.html",
-			"Controllers": ["Keypad"],
+			"Controllers": [
+				"Keypad"
+			],
 			"States": [
 				{
 					"Image": "imgs/actions/battery-status/key",
+					"TitleAlignment": "bottom",
+					"FontSize": 13
+				}
+			]
+		},
+		{
+			"Name": "Lowest Battery",
+			"UUID": "com.emilberglund.batterymonitor.lowest-battery",
+			"Icon": "imgs/actions/lowest-battery/icon",
+			"Tooltip": "Shows whichever detected device has the least charge left.",
+			"PropertyInspectorPath": "ui/lowest-battery.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/lowest-battery/key",
 					"TitleAlignment": "bottom",
 					"FontSize": 13
 				}
