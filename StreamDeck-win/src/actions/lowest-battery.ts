@@ -9,6 +9,7 @@ import type {
 } from "@elgato/streamdeck";
 import { applyAppearance, shareAppearance, sharedAppearance } from "./appearance";
 import { listApps } from "./apps";
+import { withRenames } from "./renames";
 import { discovery } from "../providers/discovery";
 import type { BatteryReading, DeviceKind, DiscoveredDevice } from "../providers/types";
 import { batteryKeyImage } from "../ui/battery-svg";
@@ -197,7 +198,7 @@ export class LowestBatteryAction extends SingletonAction<LowestBatterySettings> 
 		force = false,
 	): Promise<void> {
 		try {
-			const devices = await discovery.list(force);
+			const devices = withRenames(await discovery.list(force));
 			const lowest = pickLowest(devices, settings);
 
 			if (!lowest) {

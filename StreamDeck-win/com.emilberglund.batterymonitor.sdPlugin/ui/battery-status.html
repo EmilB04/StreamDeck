@@ -130,6 +130,7 @@
 		<sdpi-checkbox setting="showName" default="true" label="Name line"></sdpi-checkbox>
 		<sdpi-checkbox setting="showLastKnown" default="true" label="Last level when off"></sdpi-checkbox>
 		<sdpi-checkbox setting="showTimeLeft" label="Time left instead of name"></sdpi-checkbox>
+		<sdpi-checkbox setting="showOfflineAge" default="true" label="How long since it was seen"></sdpi-checkbox>
 	</sdpi-item>
 
 	<sdpi-item label="Deck title">
@@ -144,7 +145,8 @@
 	<summary>About names and offline keys</summary>
 	<div>
 		<p>Stream Deck's own Title field is switched off for this action, so <b>Nickname</b> is the only place a key is named. <b>Deck title</b> writes Stream Deck's title over the image as well, in its font rather than the key's — set it to <b>Nickname</b> and it follows the name above, falling back to the device's own when that's empty.</p>
-		<p><b>Last level when off</b> keeps showing what a disconnected device last reported, faded and marked with a crossed-out circle, with its age on the name line. Turn it off for a dash instead.</p>
+		<p><b>Last level when off</b> keeps showing what a disconnected device last reported, faded and marked with a crossed-out circle. Turn it off for a dash instead.</p>
+		<p><b>How long since it was seen</b> puts the age in front of the name — "10h · DualSense". On a narrow face, like the ring, that can leave no room for the name itself; turn it off and the crossed-out circle alone says the reading isn't live.</p>
 		<p><b>Time left</b> puts an estimate on the name line instead of the device name — there's room for one of them.</p>
 		<p>It reads <b>measuring…</b> until the device has actually dropped 3% over at least ten minutes: a rate needs a real fall to measure, and a device that reports in 10% steps can take a while to produce one. It goes back to measuring after a charge, since a discharge rate can't be read across one.</p>
 	</div>

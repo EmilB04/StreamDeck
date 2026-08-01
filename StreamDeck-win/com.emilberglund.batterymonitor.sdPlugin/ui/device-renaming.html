@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8" />
+	<title>Device Renaming</title>
+	<script src="https://sdpi-components.dev/releases/v3/sdpi-components.js"></script>
+	<link rel="stylesheet" href="inspector.css" />
+</head>
+<body>
+	<div class="status" data-state="ok">
+		<div class="status-name" id="status-name">Nothing renamed</div>
+		<div class="status-level" id="status-level">0</div>
+		<div class="status-state">Names in force</div>
+	</div>
+
+	<div class="section">Rename</div>
+
+	<sdpi-item label="Device">
+		<sdpi-select
+			setting="renameTarget"
+			datasource="getDevices"
+			show-refresh
+			hot-reload
+			placeholder="Scanning…"
+			loading="Scanning…"
+		></sdpi-select>
+	</sdpi-item>
+
+	<sdpi-item label="Call it">
+		<sdpi-textfield setting="renameValue" placeholder="Leave empty to use its own name"></sdpi-textfield>
+	</sdpi-item>
+
+	<span class="hint">
+		Applies everywhere in this plugin at once — every key, both other actions
+		and the device pickers. Nothing outside the plugin changes.
+	</span>
+
+	<div class="section">In force</div>
+
+	<div class="hint" id="rename-list">No devices have been renamed.</div>
+
+	<sdpi-item label="">
+		<sdpi-button id="clear-renames">Clear every name</sdpi-button>
+	</sdpi-item>
+
+	<details class="more">
+	<summary>About renaming</summary>
+	<div>
+		<p>Names come from the operating system or from the device's own descriptor, and some of them are useless — Windows reports one phone here as <b>4</b>, and unbranded Bluetooth gear often arrives as "Bluetooth device". Where that name can't be fixed at the source, fix it here.</p>
+		<p>A key's <b>Nickname</b> does the same thing for one key and takes priority over this. Use a rename when the device should be called the same thing everywhere, and a nickname when one key wants its own wording.</p>
+		<p>Names are matched to the device's stable key, not its position in the list, so they survive reconnects, reboots and the device being switched off.</p>
+	</div>
+	</details>
+
+	<script>
+		const client = SDPIComponents.streamDeckClient;
+
+		const send = (payload) => {
+			if (typeof client.sendToPlugin === "function") client.sendToPlugin(payload);
+			else client.send("sendToPlugin", payload);
+		};
+
+		const list = document.getElementById("rename-list");
+		const statusName = document.getElementById("status-name");
+		const statusLevel = document.getElementById("status-level");
+
+		// The plugin sends the current map alongside the device list, so the panel
+		// always shows what's actually in force rather than what was typed here.
+		client.sendToPropertyInspector?.subscribe?.((message) => {
+			if (message?.payload?.event !== "getDevices") return;
+
+			const renames = message.payload.renames ?? {};
+			const entries = Object.entries(renames);
+
+			statusLevel.textContent = `${entries.length}`;
+			statusName.textContent = entries.length === 0 ? "Nothing renamed" : "Renamed devices";
+
+			list.textContent = "";
+			if (entries.length === 0) {
+				list.textContent = "No devices have been renamed.";
+				return;
+			}
+
+			for (const [, name] of entries) {
+				const row = document.createElement("div");
+				row.textContent = `• ${name}`;
+				list.appendChild(row);
+			}
+		});
+
+		document.getElementById("clear-renames").addEventListener("click", () => send({ event: "clearRenames" }));
+	</script>
+</body>
+</html>

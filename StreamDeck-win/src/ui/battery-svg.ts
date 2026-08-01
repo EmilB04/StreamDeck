@@ -213,10 +213,12 @@ function deviceGlyph(kind: DeviceKind, color: string): string {
 			<circle cx="16.2" cy="11.8" r="1.2" fill="${color}"/>
 			<circle cx="18.6" cy="14.2" r="1.2" fill="${color}"/>`;
 		case "phone":
+			// The notch is what makes this read as a phone rather than a remote or
+			// a battery, and being filled it survives the downscale to ~20px where
+			// the hairline earpiece and home indicator it replaces turned to mush.
 			return `
-			<rect x="6.4" y="1.4" width="11.2" height="21.2" rx="3.2" ${stroke}/>
-			<path d="M10.4 4.6 h3.2" ${stroke}/>
-			<path d="M10.4 19.8 h3.2" ${stroke}/>`;
+			<rect x="6.2" y="1.7" width="11.6" height="20.6" rx="3.6" ${stroke}/>
+			<rect x="9.4" y="1.7" width="5.2" height="2" rx="1" fill="${color}"/>`;
 		case "tablet":
 			return `
 			<rect x="3.4" y="2.4" width="17.2" height="19.2" rx="2.6" ${stroke}/>
@@ -363,6 +365,28 @@ export function noticeKeyImage(message: string, colors: FaceColors): string {
 		<rect width="${SIZE}" height="${SIZE}" fill="${colors.background}"/>
 		${warning}
 		${text}
+	</svg>`;
+
+	return `data:image/svg+xml;charset=utf8,${encodeURIComponent(svg)}`;
+}
+
+/**
+ * Face for the renaming key: a luggage-tag glyph over "renamed / detected".
+ *
+ * It shows counts rather than a device because it isn't about one device — the
+ * useful thing at a glance is whether any names are in force at all.
+ */
+export function renameKeyImage(renamed: number, detected: number, colors: FaceColors): string {
+	const accent = renamed > 0 ? colors.high : colors.foreground;
+
+	const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
+		<rect width="${SIZE}" height="${SIZE}" fill="${colors.background}"/>
+		<g transform="translate(24 12) scale(1)" fill="none" stroke="${accent}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+			<path d="M11.4 1.6 H21 a1.4 1.4 0 0 1 1.4 1.4 v9.6 a1.4 1.4 0 0 1 -0.4 1 l-8.6 8.6 a1.4 1.4 0 0 1 -2 0 L2.4 13.6 a1.4 1.4 0 0 1 0 -2 l8.6 -8.6 a1.4 1.4 0 0 1 0.4 -1.4 z"/>
+			<circle cx="17.4" cy="6.6" r="1.6"/>
+		</g>
+		<text x="${SIZE / 2}" y="52" text-anchor="middle" font-family="${FONT}" font-size="15" font-weight="700" fill="${accent}">${renamed}</text>
+		<text x="${SIZE / 2}" y="65" text-anchor="middle" font-family="${FONT}" font-size="10" fill="${colors.foreground}" fill-opacity="0.75">of ${detected}</text>
 	</svg>`;
 
 	return `data:image/svg+xml;charset=utf8,${encodeURIComponent(svg)}`;

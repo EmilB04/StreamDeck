@@ -128,6 +128,18 @@ Still open before submitting:
 
 **Device Battery** — one device on one key, chosen in the property inspector.
 
+**Device Renaming** — renames devices for this plugin, everywhere at once. The
+name comes from the OS or the device's own descriptor and often can't be fixed
+at the source: Windows reports one phone on the dev machine as **4**. A key's
+Nickname fixes that for one key; a rename fixes it for every key, both other
+actions and every device picker, because the name belongs to the device rather
+than to a key. Nothing outside the plugin is touched — no OS record, no
+firmware; the map is applied on the way out, wherever a label is shown.
+
+Names are stored in global settings against the device's stable key, so they
+survive reconnects, reboots and the device being switched off. Precedence is
+Nickname → rename → whatever the device calls itself.
+
 **Lowest Battery** — whichever detected device has least charge, named on the
 key. Five keys each showing a healthy number don't answer "is anything about to
 die on me"; this one does. It reads nothing itself: discovery has already
@@ -321,7 +333,9 @@ device is gone:
   key's background colour — the same corner treatment as the lowest-battery
   chevron, so a marker sitting over the meter stays readable;
 - the name line, if it's on, is prefixed with the age of that reading (`3h ·
-  Kraken V3`) — the age goes first because the line truncates from the right;
+  Kraken V3`) — the age goes first because the line truncates from the right.
+  Turn **how long since it was seen** off when that prefix crowds out the name,
+  which it does on the ring face where the line is at its narrowest;
 - the "percentage" key title gets a `~` prefix (`~78%`).
 
 The stored level is only written when the percentage changes (or its timestamp
@@ -680,6 +694,8 @@ src/
   actions/
     battery-status.ts        the "Device Battery" action (polling, rendering, PI datasource)
     lowest-battery.ts        the "Lowest Battery" action — picks the emptiest device
+    device-renaming.ts       the "Device Renaming" action — plugin-wide device names
+    renames.ts               the rename map, cached from global settings
     settings.ts              per-key settings shape, defaults and version migrations
     apps.ts                  lists installed applications for the picker (Get-StartApps)
     launch.ts                opens the app/file/URL a press is pointed at
@@ -701,6 +717,7 @@ com.emilberglund.batterymonitor.sdPlugin/
   manifest.json
   ui/battery-status.html     property inspector (device list is a plugin datasource)
   ui/lowest-battery.html     property inspector for the lowest-battery action
+  ui/device-renaming.html    property inspector for renaming devices
   ui/inspector.css           styling shared by both inspectors
   bin/                       build output (gitignored)
 scripts/

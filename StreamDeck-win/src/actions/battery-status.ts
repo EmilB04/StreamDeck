@@ -15,6 +15,7 @@ import { batteryKeyImage, noticeKeyImage } from "../ui/battery-svg";
 import { applyAppearance, shareAppearance, sharedAppearance } from "./appearance";
 import { listApps } from "./apps";
 import { openTarget } from "./launch";
+import { labelOf, withRenames } from "./renames";
 import type { BatterySettings, PollMode } from "./settings";
 import {
 	DEFAULTS,
@@ -313,7 +314,7 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 		const force = ev.payload?.isRefresh === true;
 		streamDeck.logger.info(`battery-status: property inspector requested devices (force=${force})`);
 
-		const devices = await discovery.list(force);
+		const devices = withRenames(await discovery.list(force));
 		const settings = await ev.action.getSettings();
 		const items = devices.map((d) => ({ label: pickerLabel(d), value: d.key }));
 
@@ -777,7 +778,9 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 	 * improves on a name the owner chose.
 	 */
 	private labelFor(settings: BatterySettings, reading: BatteryReading): string {
-		return settings.displayName?.trim() || reading.deviceLabel;
+		// Nickname is this key's own answer and wins; a rename is the plugin-wide
+		// one; the device's own name is the fallback.
+		return settings.displayName?.trim() || labelOf(settings.deviceKey, reading.deviceLabel);
 	}
 
 	/**
@@ -803,6 +806,8 @@ export class BatteryStatusAction extends SingletonAction<BatterySettings> {
 		}
 
 		if (reading.status !== "stale") return label;
+		if (!(settings.showOfflineAge ?? DEFAULTS.showOfflineAge)) return label;
+
 		// In-memory first: it's exact. The persisted stamp is the fallback after a
 		// restart, when nothing in memory knows when the device was last seen.
 		const age = ageLabel(lastLiveAt ?? settings.lastSeenAt);

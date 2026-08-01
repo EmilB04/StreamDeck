@@ -105,6 +105,33 @@ def battery(size, *, background, fill_ratio, with_bolt, monochrome=False, with_a
     return img.resize((size, size), Image.LANCZOS)
 
 
+def tag(size, *, background, monochrome=False):
+    """Luggage tag: the mark for the renaming action."""
+    s = size * SS
+    img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    if background:
+        d.rounded_rectangle([0, 0, s - 1, s - 1], radius=s * 0.22, fill=BG)
+
+    color = WHITE if monochrome else FG
+    w = max(2, int(s * 0.055))
+    # Body: a square rotated 45 degrees reads as a tag at any size.
+    pts = [(s * 0.52, s * 0.2), (s * 0.8, s * 0.2), (s * 0.8, s * 0.48),
+           (s * 0.5, s * 0.78), (s * 0.22, s * 0.5)]
+    d.line(pts + [pts[0]], fill=color, width=w, joint="curve")
+    r = s * 0.045
+    d.ellipse([s * 0.68 - r, s * 0.3 - r, s * 0.68 + r, s * 0.3 + r], outline=color, width=w)
+    return img.resize((size, size), Image.LANCZOS)
+
+
+def save_tag(name, size, **kw):
+    for scale, suffix in ((1, ""), (2, "@2x")):
+        out = SDPLUGIN / f"{name}{suffix}.png"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        tag(size * scale, **kw).save(out)
+        print(f"wrote {out.relative_to(SDPLUGIN)} ({size * scale}px)")
+
+
 def save(name, size, **kw):
     for scale, suffix in ((1, ""), (2, "@2x")):
         out = SDPLUGIN / f"{name}{suffix}.png"
@@ -129,6 +156,10 @@ save("imgs/actions/battery-status/key", 72, background=True, fill_ratio=0, with_
 save("imgs/actions/lowest-battery/icon", 20, background=False, fill_ratio=0, with_bolt=False,
      monochrome=True, with_arrow=True)
 save("imgs/actions/lowest-battery/key", 72, background=True, fill_ratio=0, with_bolt=False, with_arrow=True)
+
+# The renaming action: a tag rather than a battery, since it isn't about charge.
+save_tag("imgs/actions/device-renaming/icon", 20, background=False, monochrome=True)
+save_tag("imgs/actions/device-renaming/key", 72, background=True)
 
 # Marketplace listing icon, uploaded in Maker Console rather than shipped in the
 # package — hence a folder outside the .sdPlugin.

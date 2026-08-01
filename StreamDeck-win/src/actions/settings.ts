@@ -60,6 +60,8 @@ export type BatterySettings = {
 	showName?: boolean;
 	/** Replaces the name line with how long the level should last. */
 	showTimeLeft?: boolean;
+	/** Prefixes the name line with how long ago an offline device was last seen. */
+	showOfflineAge?: boolean;
 	titleMode?: TitleMode;
 	lowThreshold?: number;
 	mediumThreshold?: number;
@@ -160,6 +162,7 @@ export const APPEARANCE_KEYS = [
 	"showPercent",
 	"showName",
 	"showTimeLeft",
+	"showOfflineAge",
 	"lowThreshold",
 	"mediumThreshold",
 	"alertBelow",
@@ -174,7 +177,11 @@ export const APPEARANCE_KEYS = [
 export type Appearance = Pick<BatterySettings, (typeof APPEARANCE_KEYS)[number]>;
 
 /** Settings shared by every key of this plugin. */
-export type GlobalSettings = { appearance?: Appearance };
+export type GlobalSettings = {
+	appearance?: Appearance;
+	/** Device key -> the name the user gave it; see actions/renames.ts. */
+	renames?: Record<string, string>;
+};
 
 export function extractAppearance(settings: BatterySettings): Appearance {
 	const appearance: Appearance = {};
@@ -228,6 +235,7 @@ export const DEFAULTS = {
 	showPercent: true,
 	showName: true,
 	showTimeLeft: false,
+	showOfflineAge: true,
 	iconKind: "auto" as DeviceKind | "auto",
 	titleMode: "none" as TitleMode,
 	lowThreshold: 20,

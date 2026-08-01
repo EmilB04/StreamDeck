@@ -59,6 +59,24 @@
 				}
 			],
 			"UserTitleEnabled": false
+		},
+		{
+			"Name": "Device Renaming",
+			"UUID": "com.emilberglund.batterymonitor.device-renaming",
+			"Icon": "imgs/actions/device-renaming/icon",
+			"Tooltip": "Rename detected devices for this plugin \u2014 every key follows.",
+			"PropertyInspectorPath": "ui/device-renaming.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"UserTitleEnabled": false,
+			"States": [
+				{
+					"Image": "imgs/actions/device-renaming/key",
+					"TitleAlignment": "bottom",
+					"FontSize": 13
+				}
+			]
 		}
 	]
 }
