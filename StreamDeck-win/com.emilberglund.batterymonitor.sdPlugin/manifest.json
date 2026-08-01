@@ -4,7 +4,7 @@
 	"UUID": "com.emilberglund.batterymonitor",
 	"Version": "1.0.0.0",
 	"Author": "Emil Berglund",
-	"Description": "Multi-purpose plugin. Starts with battery monitoring: scans the machine for wireless peripherals (headsets, Logitech HID++, Asus, Bluetooth) and shows the battery level of the one you pick.",
+	"Description": "Shows the battery level of your wireless devices on a key. Finds headsets, mice, keyboards, controllers and Bluetooth devices automatically, warns you when one runs low, and can watch whichever device is emptiest.",
 	"Icon": "imgs/plugin/marketplace",
 	"CategoryIcon": "imgs/plugin/category-icon",
 	"Category": "Battery Monitor",
@@ -78,5 +78,6 @@
 				}
 			]
 		}
-	]
+	],
+	"URL": "https://github.com/EmilB04/StreamDeck"
 }

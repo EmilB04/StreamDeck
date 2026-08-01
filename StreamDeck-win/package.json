@@ -25,5 +25,15 @@
   "dependencies": {
     "@elgato/streamdeck": "^2.1.0",
     "node-hid": "^3.1.0"
-  }
+  },
+  "license": "SEE LICENSE IN LICENSE",
+  "author": "Emil Berglund",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EmilB04/StreamDeck.git"
+  },
+  "bugs": {
+    "url": "https://github.com/EmilB04/StreamDeck/issues"
+  },
+  "homepage": "https://github.com/EmilB04/StreamDeck"
 }

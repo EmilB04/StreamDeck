@@ -45,7 +45,8 @@ equality for names too short to match safely.
 
 ## Requirements
 
-- Stream Deck app (Windows 10+ or macOS 12+)
+- Stream Deck app on Windows 10 or later. macOS is not supported: none of
+  the HID providers have ever been run there, so it isn't claimed.
 - Node.js 20+ on the machine running Stream Deck
 - [HeadsetControl](https://github.com/Sapd/HeadsetControl/releases) on `PATH`
   (for headsets) — or set `HEADSETCONTROL_PATH` to its full path. The property
@@ -141,17 +142,18 @@ What's already prepared for that:
 - **`store/app-icon-256.png` and `-512.png`** are the Marketplace listing icon,
   which is a separate asset from the manifest's — it's uploaded in Maker
   Console, so it lives outside the `.sdPlugin` folder and never ships.
-- **Version `1.0.0.0`**, and **macOS removed from the manifest**: the HID
-  providers there would need Input Monitoring permission and none of it has
-  ever been run, so claiming a platform a reviewer can find dead is worse than
-  shipping Windows-only and adding mac once it's tested.
+- **Version `1.0.0.0`**, and **Windows only**: the manifest declares no macOS
+  support. The code would probably mostly work — the PowerShell providers
+  self-disable, `launch.ts` handles `open`, and node-hid ships darwin binaries —
+  but HID reads there need Input Monitoring permission and nothing has been run
+  on a Mac. Claiming a platform a reviewer can find dead is worse than shipping
+  Windows-only and adding macOS once someone has tested it.
 
 Still open before submitting:
 
 - **Razer, Xbox and DualShock 4 are unverified** against hardware. They're
   marked in the property inspector, but public users will hit that code.
-- Gallery images and a support URL still have to be produced — neither can come
-  from the repo.
+- Gallery images still have to be produced — they can't come from the repo.
 - Optional: **DRM** needs `SDKVersion: 3` and `Software.MinimumVersion: 6.9`,
   which encrypts the package at the cost of a runtime-readable manifest.
 
@@ -778,3 +780,19 @@ Implement `BatteryProvider` (`discover()` + `read()`) in `src/providers/`, then
 add it to the `providers` array in `src/providers/discovery.ts`. Nothing else —
 the property inspector, key rendering and settings all key off whatever
 `discover()` returns.
+
+## Licence
+
+MIT with an attribution clause — see [`LICENSE`](LICENSE). Use it, change it,
+ship it, sell it; keep the copyright notice, credit Emil Berglund as the
+original creator and link back to this repository somewhere a reader can find
+it. No warranty.
+
+That added clause makes this a non-standard licence: GitHub won't detect it as
+MIT, and automated licence scanners will flag it as custom rather than waving it
+through. That's the trade for making the credit requirement explicit.
+
+Third-party pieces keep their own terms: `node-hid` ships with the plugin and is
+MIT-licensed, and [HeadsetControl](https://github.com/Sapd/HeadsetControl) is
+GPL-3.0 but is neither bundled nor linked — the plugin runs it as a separate
+program if the user has installed it.
