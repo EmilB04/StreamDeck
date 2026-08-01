@@ -1,7 +1,7 @@
 import type HidModule from "node-hid";
+import { log } from "./log";
 
-export const HID_UNAVAILABLE =
-	"node-hid not available. Run `npm run sync-deps` on the machine running Stream Deck.";
+export const HID_UNAVAILABLE = "node-hid not available. Run `npm run sync-deps` on the machine running Stream Deck.";
 
 /**
  * node-hid is a native addon that only gets installed into the .sdPlugin folder
@@ -16,10 +16,47 @@ export async function loadHid(): Promise<typeof HidModule | null> {
 	try {
 		const ns = await import("node-hid");
 		cached = ns.default ?? (ns as unknown as typeof HidModule);
-	} catch {
+	} catch (err) {
+		// Every HID provider goes quiet when this happens, which otherwise looks
+		// exactly like a desk with no supported devices on it.
+		log.warn(`${HID_UNAVAILABLE} (${String(err)})`);
 		cached = null;
 	}
 	return cached;
+}
+
+/**
+ * Opens a HID interface, runs `use`, and closes it again whatever happens.
+ *
+ * Every provider had its own copy of this open/try/finally dance, and the
+ * handles are exclusive on Windows — one early return that skipped the close
+ * would lock the device out until Stream Deck restarted. Returns `fallback` if
+ * the interface can't be opened or the work throws, because a provider must
+ * never take down a scan.
+ */
+export async function withHidDevice<T>(
+	path: string,
+	fallback: T,
+	use: (device: HidModule.HID) => Promise<T> | T,
+	context?: string,
+): Promise<T> {
+	const HID = await loadHid();
+	if (!HID) return fallback;
+
+	let device: HidModule.HID | undefined;
+	try {
+		device = new HID.HID(path);
+		return await use(device);
+	} catch (err) {
+		if (context) log.warn(`${context}: ${String(err)}`);
+		return fallback;
+	} finally {
+		try {
+			device?.close();
+		} catch {
+			// Already gone — unplugged mid-read, most likely.
+		}
+	}
 }
 
 /** Enumerates connected HID interfaces, optionally filtered by vendor. */

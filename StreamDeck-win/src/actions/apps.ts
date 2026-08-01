@@ -25,7 +25,7 @@ const SCRIPT = [
 	"$ErrorActionPreference='SilentlyContinue';",
 	"$out = New-Object System.Collections.ArrayList;",
 	// Shortcuts first, so a desktop app is preferred over a same-named Store entry.
-	"$roots = @(\"$env:ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\", \"$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs\");",
+	'$roots = @("$env:ProgramData\\Microsoft\\Windows\\Start Menu\\Programs", "$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs");',
 	"foreach ($lnk in Get-ChildItem -Path $roots -Filter *.lnk -Recurse -ErrorAction SilentlyContinue) {",
 	"  [void]$out.Add([pscustomobject]@{ name=$lnk.BaseName; value=$lnk.FullName }) };",
 	"foreach ($app in Get-StartApps | Where-Object { $_.AppID -like '*!*' }) {",

@@ -1,7 +1,7 @@
-import type { Device as HidDeviceInfo, HID as HidDevice } from "node-hid";
-import { hidDevices, loadHid } from "./hid";
+import type { Device as HidDeviceInfo } from "node-hid";
+import { hidDevices, withHidDevice } from "./hid";
 import type { BatteryProvider, BatteryReading, DiscoveredDevice } from "./types";
-import { slug } from "./types";
+import { notFound, slug, unsupported } from "./types";
 
 const VENDOR_MICROSOFT = 0x045e;
 
@@ -95,51 +95,43 @@ export class XboxProvider implements BatteryProvider {
 		const info = pads.find((d) => serialNumber !== "" && d.serialNumber === serialNumber) ?? pads[0];
 
 		if (!info) {
-			return { deviceLabel: device.label, percent: null, status: "not-found", detail: "Controller not connected" };
+			return notFound(device.label, "Controller not connected");
 		}
 		return this.readFrom(info, device.label);
 	}
 
 	private async readFrom(info: HidDeviceInfo, label: string): Promise<BatteryReading> {
-		const HID = await loadHid();
-		if (!HID) return { deviceLabel: label, percent: null, status: "error", detail: "node-hid unavailable" };
+		const failed: BatteryReading = {
+			deviceLabel: label,
+			percent: null,
+			status: "error",
+			detail: "Controller couldn't be opened",
+		};
 
-		let device: HidDevice | undefined;
-
-		try {
-			device = new HID.HID(info.path!);
-
-			// Ask outright first: it costs nothing and doesn't depend on the pad
-			// happening to send an update while we listen.
-			try {
-				const feature = device.getFeatureReport(REPORT_BATTERY, 2);
-				if (feature?.length >= 2) return decodeBattery(feature[1], label);
-			} catch {
-				// Not every firmware answers a feature read for this report.
-			}
-
-			for (let attempt = 0; attempt < READ_ATTEMPTS; attempt++) {
-				const report = device.readTimeout(READ_TIMEOUT_MS);
-				if (report?.length && report[0] === REPORT_BATTERY && report.length >= 2) {
-					return decodeBattery(report[1], label);
+		return withHidDevice(
+			info.path!,
+			failed,
+			(device) => {
+				// Ask outright first: it costs nothing and doesn't depend on the pad
+				// happening to send an update while we listen.
+				try {
+					const feature = device.getFeatureReport(REPORT_BATTERY, 2);
+					if (feature?.length >= 2) return decodeBattery(feature[1], label);
+				} catch {
+					// Not every firmware answers a feature read for this report.
 				}
-			}
 
-			return {
-				deviceLabel: label,
-				percent: null,
-				status: "unsupported",
-				detail: "Connected, but it didn't send a battery report",
-			};
-		} catch {
-			return { deviceLabel: label, percent: null, status: "error", detail: "Controller couldn't be opened" };
-		} finally {
-			try {
-				device?.close();
-			} catch {
-				/* already closed */
-			}
-		}
+				for (let attempt = 0; attempt < READ_ATTEMPTS; attempt++) {
+					const report = device.readTimeout(READ_TIMEOUT_MS);
+					if (report?.length && report[0] === REPORT_BATTERY && report.length >= 2) {
+						return decodeBattery(report[1], label);
+					}
+				}
+
+				return unsupported(label, "Connected, but it didn't send a battery report");
+			},
+			`xbox: ${label}`,
+		);
 	}
 }
 
@@ -154,9 +146,9 @@ export function isXboxPad(info: HidDeviceInfo): boolean {
 	);
 }
 
-function decodeBattery(flags: number, label: string): BatteryReading {
+export function decodeBattery(flags: number, label: string): BatteryReading {
 	if ((flags & ONLINE) === 0) {
-		return { deviceLabel: label, percent: null, status: "not-found", detail: "Controller is offline" };
+		return notFound(label, "Controller is offline");
 	}
 
 	const step = CAPACITY_STEPS[flags & CAPACITY];

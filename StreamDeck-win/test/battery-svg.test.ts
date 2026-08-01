@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { batteryKeyImage, DEFAULT_COLORS, noticeKeyImage, wrapWords } from "../src/ui/battery-svg";
+import { batteryKeyImage, DEFAULT_COLORS, noticeKeyImage, renameKeyImage, wrapWords } from "../src/ui/battery-svg";
 import type { FaceOptions } from "../src/ui/battery-svg";
 import type { BatteryStatus } from "../src/providers/types";
 
@@ -76,7 +76,7 @@ describe("the key face", () => {
 
 	it("escapes a name that would otherwise break the document", () => {
 		const rendered = svg({ percent: 50, status: "ok", name: 'Bob & "Co" <x>' });
-		assert.ok(!rendered.includes('<x>'), "raw markup would make the SVG unparseable");
+		assert.ok(!rendered.includes("<x>"), "raw markup would make the SVG unparseable");
 		assert.match(rendered, /&amp;/);
 	});
 
@@ -101,5 +101,28 @@ describe("the notice face", () => {
 		assert.match(notice, />Device is</);
 		assert.match(notice, />Disconnected</);
 		assert.match(notice, /M0 -8 L9 8 H-9 Z/, "the warning triangle");
+	});
+});
+
+describe("the device-renaming key", () => {
+	/** The rendered SVG, decoded back out of the data URI. */
+	const rename = (renamed: number, detected: number): string =>
+		decodeURIComponent(renameKeyImage(renamed, detected, DEFAULT_COLORS));
+
+	it("counts the names in force against the devices detected", () => {
+		const markup = rename(3, 11);
+		assert.match(markup, />3</);
+		assert.match(markup, />of 11</);
+	});
+
+	it("picks up the accent colour once something has been renamed", () => {
+		// The key is otherwise indistinguishable from one that has done nothing.
+		assert.ok(rename(2, 5).includes(DEFAULT_COLORS.high));
+		assert.ok(!rename(0, 5).includes(DEFAULT_COLORS.high), "nothing renamed yet, so no accent");
+	});
+
+	it("is a data URI, which is what setImage needs", () => {
+		// A bare <svg> string is silently ignored and the key keeps its manifest image.
+		assert.match(renameKeyImage(0, 0, DEFAULT_COLORS), /^data:image\/svg\+xml;charset=utf8,/);
 	});
 });

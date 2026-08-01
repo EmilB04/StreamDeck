@@ -1,8 +1,8 @@
-import type { Device as HidDeviceInfo, HID as HidDevice } from "node-hid";
-import { hidDevices, loadHid } from "./hid";
+import type { Device as HidDeviceInfo } from "node-hid";
+import { hidDevices, withHidDevice } from "./hid";
 import { log } from "./log";
 import type { BatteryProvider, BatteryReading, DeviceKind, DiscoveredDevice } from "./types";
-import { hex4 } from "./types";
+import { hex4, notFound } from "./types";
 
 const VENDOR_ID = 0x0b05; // ASUSTek
 
@@ -60,8 +60,9 @@ const ERROR_MARKER = [0xff, 0xaa];
  * Battery is read over the receiver's vendor collection. There is no public spec
  * for this; the command and frame layout were derived on real hardware (see
  * README "Asus battery protocol" and scripts/asus-*), and validated against the
- * percentage and low-battery threshold Armoury Crate displays. Devices that
- * don't answer are reported as unsupported rather than guessed at.
+ * percentage and low-battery threshold Armoury Crate displays. A device that
+ * doesn't answer is reported as not detected rather than guessed at — it is
+ * usually just switched off behind a dongle that's still plugged in.
  */
 export class AsusProvider implements BatteryProvider {
 	readonly id = "asus";
@@ -101,12 +102,11 @@ export class AsusProvider implements BatteryProvider {
 				device.supportsBattery = true;
 				device.reading = reading;
 			} else {
-				device.reading = {
-					deviceLabel: device.label,
-					percent: null,
-					status: "unsupported",
-					detail: "Detected, but it didn't answer the ROG power command",
-				};
+				// Silent, not batteryless: a ROG keyboard that's switched off still
+				// leaves its dongle plugged in and answers nothing. "not-found" is
+				// what a device that may come back looks like — and it lets the key
+				// back off its polling instead of probing something that's asleep.
+				device.reading = notFound(device.label, "Detected, but it didn't answer the ROG power command");
 			}
 		}
 
@@ -121,19 +121,15 @@ export class AsusProvider implements BatteryProvider {
 		const devices = await hidDevices(VENDOR_ID);
 		const present = devices?.some((d) => d.productId === productId) ?? false;
 
-		return {
-			deviceLabel: device.label,
-			percent: null,
-			status: present ? "unsupported" : "not-found",
-			detail: present ? "Device didn't answer the ROG power command" : "Device not connected",
-		};
+		// Either way this is "not answering now", not "has no battery" — the
+		// difference is only what to tell the user about why.
+		return notFound(device.label, present ? "Device didn't answer the ROG power command" : "Device not connected");
 	}
 
 	/** Asks each vendor collection for the power frame; first valid answer wins. */
 	private async readPower(productId: number, label: string): Promise<BatteryReading | null> {
-		const HID = await loadHid();
 		const devices = await hidDevices(VENDOR_ID);
-		if (!HID || !devices) return null;
+		if (!devices) return null;
 
 		const candidates = devices.filter(
 			(d) => d.productId === productId && d.path && REPORT_ID_BY_USAGE_PAGE.has(d.usagePage ?? 0),
@@ -143,7 +139,7 @@ export class AsusProvider implements BatteryProvider {
 			const reportId = REPORT_ID_BY_USAGE_PAGE.get(info.usagePage ?? 0);
 			if (reportId === undefined) continue;
 
-			const frame = this.exchange(HID, info, reportId);
+			const frame = await this.exchange(info, reportId);
 			if (!frame) continue;
 
 			const percent = frame[PERCENT_INDEX];
@@ -167,15 +163,10 @@ export class AsusProvider implements BatteryProvider {
 	}
 
 	/** Sends the power command on one collection and returns the reply frame. */
-	private exchange(
-		HID: NonNullable<Awaited<ReturnType<typeof loadHid>>>,
-		info: HidDeviceInfo,
-		reportId: number,
-	): number[] | null {
-		let device: HidDevice | undefined;
-		try {
-			device = new HID.HID(info.path!);
-
+	private exchange(info: HidDeviceInfo, reportId: number): Promise<number[] | null> {
+		// null on a failure to open: the wrong collection for this id, or a busy
+		// interface — either way the caller moves on to the next candidate.
+		return withHidDevice<number[] | null>(info.path!, null, (device) => {
 			const report = new Array<number>(REPORT_LENGTH).fill(0);
 			report[0] = reportId;
 			report[1] = CMD_READ_INFO;
@@ -190,17 +181,13 @@ export class AsusProvider implements BatteryProvider {
 			if (bytes[1] === ERROR_MARKER[0] && bytes[2] === ERROR_MARKER[1]) return null;
 			if (bytes[1] !== CMD_READ_INFO || bytes[2] !== SUB_POWER) return null;
 
+			// A short frame reads as `undefined` at the level offsets, and neither
+			// `undefined < 1` nor `undefined > 100` is true — so the caller's range
+			// check would wave it through and report a level of `undefined`.
+			if (bytes.length <= PERCENT_MIRROR_INDEX) return null;
+
 			return bytes;
-		} catch {
-			// Wrong collection for this id, or the interface is busy.
-			return null;
-		} finally {
-			try {
-				device?.close();
-			} catch {
-				/* already closed */
-			}
-		}
+		});
 	}
 }
 

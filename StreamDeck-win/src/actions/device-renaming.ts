@@ -5,12 +5,15 @@ import type {
 	KeyDownEvent,
 	SendToPluginEvent,
 	WillAppearEvent,
+	WillDisappearEvent,
 } from "@elgato/streamdeck";
 import { discovery } from "../providers/discovery";
 import { renameKeyImage } from "../ui/battery-svg";
 import { faceColors } from "./settings";
 import type { BatterySettings } from "./settings";
 import { loadRenames, renames, setRename, withRenames } from "./renames";
+import type { UiMessage } from "./ui-messages";
+import { replyToPanel } from "./ui-messages";
 
 export type RenamingSettings = BatterySettings & {
 	/** Device currently being edited in the property inspector. */
@@ -18,8 +21,6 @@ export type RenamingSettings = BatterySettings & {
 	/** The name being typed for it. */
 	renameValue?: string;
 };
-
-type UiMessage = { event?: string; isRefresh?: boolean };
 
 /**
  * Renames devices for this plugin, everywhere at once.
@@ -43,6 +44,14 @@ export class DeviceRenamingAction extends SingletonAction<RenamingSettings> {
 		await loadRenames(true);
 		this.targets.set(ev.action.id, ev.payload.settings.renameTarget?.trim() ?? "");
 		await this.draw(ev.action, ev.payload.settings);
+	}
+
+	/**
+	 * Forgets the key. Without this the map keeps an entry for every panel ever
+	 * shown, including keys long since dragged off a profile.
+	 */
+	override onWillDisappear(ev: WillDisappearEvent<RenamingSettings>): void {
+		this.targets.delete(ev.action.id);
 	}
 
 	/** A press rescans, so a device that was off can be named without waiting. */
@@ -121,11 +130,7 @@ export class DeviceRenamingAction extends SingletonAction<RenamingSettings> {
 
 		if (items.length === 0) items.push({ label: "No devices detected", value: "" });
 
-		await streamDeck.ui.sendToPropertyInspector({
-			event: "getDevices",
-			items,
-			renames: map,
-		});
+		await replyToPanel({ event: "getDevices", items, renames: map });
 	}
 
 	private async draw(action: KeyAction<RenamingSettings>, settings: RenamingSettings): Promise<void> {

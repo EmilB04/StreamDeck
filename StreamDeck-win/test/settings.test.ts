@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
 	adaptiveSeconds,
+	DEFAULTS,
 	estimateRemaining,
 	extractAppearance,
+	faceColors,
 	formatDuration,
 	migrate,
 	MIN_REFRESH_SECONDS,
@@ -189,7 +191,12 @@ describe("settings migration", () => {
 	});
 
 	it("keeps everything else the key had", () => {
-		const migrated = migrate({ configured: true, settingsVersion: 1, deviceKey: "logitech:abc", displayName: "Mouse" })!;
+		const migrated = migrate({
+			configured: true,
+			settingsVersion: 1,
+			deviceKey: "logitech:abc",
+			displayName: "Mouse",
+		})!;
 		assert.equal(migrated.deviceKey, "logitech:abc");
 		assert.equal(migrated.displayName, "Mouse");
 	});
@@ -207,5 +214,34 @@ describe("shared appearance", () => {
 		});
 
 		assert.deepEqual(appearance, { colorLow: "#111111", lowThreshold: 25, showTimeLeft: true });
+	});
+});
+
+describe("colours that reach the key face", () => {
+	it("passes a hex colour through untouched", () => {
+		const colors = faceColors({ colorLow: "#ff0000", colorHigh: "#0f0" });
+		assert.equal(colors.low, "#ff0000");
+		assert.equal(colors.high, "#0f0");
+	});
+
+	it("falls back to the default for anything that isn't a hex colour", () => {
+		// These strings are interpolated into SVG attributes, so a value carrying a
+		// quote would break out of the attribute and corrupt the markup. Refusing
+		// it keeps the key readable instead of painting a broken face.
+		const colors = faceColors({
+			colorLow: '#f00" onload="alert(1)',
+			colorMedium: "red",
+			colorHigh: "",
+		});
+
+		assert.equal(colors.low, DEFAULTS.colorLow);
+		assert.equal(colors.medium, DEFAULTS.colorMedium);
+		assert.equal(colors.high, DEFAULTS.colorHigh);
+	});
+
+	it("uses the defaults for a key that has never been configured", () => {
+		const colors = faceColors({});
+		assert.equal(colors.low, DEFAULTS.colorLow);
+		assert.equal(colors.background, DEFAULTS.colorBackground);
 	});
 });

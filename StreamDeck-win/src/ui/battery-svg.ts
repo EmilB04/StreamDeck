@@ -100,7 +100,7 @@ const ICON_STROKE = 2.1;
 
 function fitFontSize(text: string, maxWidth: number, maxFont: number): number {
 	const byWidth = maxWidth / (CHAR_WIDTH_RATIO * Math.max(1, text.length));
-	return Math.max(8, Math.min(maxFont, byWidth));
+	return Math.max(MIN_FONT_SIZE, Math.min(maxFont, byWidth));
 }
 
 function truncateToWidth(text: string, maxWidth: number, fontSize: number): string {
@@ -160,12 +160,27 @@ export function wrapWords(words: string[], maxChars: number): string[] {
 	return lines;
 }
 
+/** Smallest readable size on a 72px key; below this, text is decoration. */
+const MIN_FONT_SIZE = 8;
+
+/**
+ * Wraps a key's contents in the SVG shell and hands back what setImage wants.
+ *
+ * A bare `<svg>` string is silently ignored by Stream Deck and the key keeps
+ * its manifest image, so the data URI isn't optional — which is exactly why
+ * every entry point went through the same three lines before this existed.
+ */
+function keyImage(background: string, body: string): string {
+	const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
+		<rect width="${SIZE}" height="${SIZE}" fill="${background}"/>
+		${body}
+	</svg>`;
+
+	return `data:image/svg+xml;charset=utf8,${encodeURIComponent(svg)}`;
+}
+
 function escapeXml(value: string): string {
-	return value
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;");
+	return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 /**
@@ -338,7 +353,7 @@ type Block = { height: number; render: (y: number) => string };
 export function noticeKeyImage(message: string, colors: FaceColors): string {
 	const words = message.split(/\s+/).filter(Boolean);
 	const longest = words.reduce((max, word) => Math.max(max, word.length), 1);
-	const fontSize = Math.max(8, Math.min(13, FLAT_INNER_WIDTH / (CHAR_WIDTH_RATIO * longest)));
+	const fontSize = Math.max(MIN_FONT_SIZE, Math.min(13, FLAT_INNER_WIDTH / (CHAR_WIDTH_RATIO * longest)));
 	const lines = wrapWords(words, Math.floor(FLAT_INNER_WIDTH / (CHAR_WIDTH_RATIO * fontSize)));
 
 	const lineHeight = fontSize * 1.25;
@@ -361,13 +376,7 @@ export function noticeKeyImage(message: string, colors: FaceColors): string {
 		})
 		.join("");
 
-	const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
-		<rect width="${SIZE}" height="${SIZE}" fill="${colors.background}"/>
-		${warning}
-		${text}
-	</svg>`;
-
-	return `data:image/svg+xml;charset=utf8,${encodeURIComponent(svg)}`;
+	return keyImage(colors.background, `${warning}${text}`);
 }
 
 /**
@@ -379,17 +388,14 @@ export function noticeKeyImage(message: string, colors: FaceColors): string {
 export function renameKeyImage(renamed: number, detected: number, colors: FaceColors): string {
 	const accent = renamed > 0 ? colors.high : colors.foreground;
 
-	const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
-		<rect width="${SIZE}" height="${SIZE}" fill="${colors.background}"/>
-		<g transform="translate(24 12) scale(1)" fill="none" stroke="${accent}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+	const body = `<g transform="translate(24 12) scale(1)" fill="none" stroke="${accent}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
 			<path d="M11.4 1.6 H21 a1.4 1.4 0 0 1 1.4 1.4 v9.6 a1.4 1.4 0 0 1 -0.4 1 l-8.6 8.6 a1.4 1.4 0 0 1 -2 0 L2.4 13.6 a1.4 1.4 0 0 1 0 -2 l8.6 -8.6 a1.4 1.4 0 0 1 0.4 -1.4 z"/>
 			<circle cx="17.4" cy="6.6" r="1.6"/>
 		</g>
 		<text x="${SIZE / 2}" y="52" text-anchor="middle" font-family="${FONT}" font-size="15" font-weight="700" fill="${accent}">${renamed}</text>
-		<text x="${SIZE / 2}" y="65" text-anchor="middle" font-family="${FONT}" font-size="10" fill="${colors.foreground}" fill-opacity="0.75">of ${detected}</text>
-	</svg>`;
+		<text x="${SIZE / 2}" y="65" text-anchor="middle" font-family="${FONT}" font-size="10" fill="${colors.foreground}" fill-opacity="0.75">of ${detected}</text>`;
 
-	return `data:image/svg+xml;charset=utf8,${encodeURIComponent(svg)}`;
+	return keyImage(colors.background, body);
 }
 
 /**
@@ -462,38 +468,7 @@ export function batteryKeyImage(options: FaceOptions): string {
 		});
 	}
 
-	// Enabling everything can ask for more height than the key has (and in ring
-	// style, more than the ring's inner circle). Close the gaps first, then scale
-	// the whole stack down uniformly, so the layout degrades in proportion rather
-	// than spilling over the edge.
-	// Inside the ring the usable height is less than the inner diameter: a line
-	// of text near the top or bottom of a circle has far less width than one
-	// across its middle, so the stack is kept to the band where it fits.
-	const available = isRing ? (RING_SIZE - RING_STROKE * 2) * 0.8 : SIZE - 4;
-	const content = blocks.reduce((sum, b) => sum + b.height, 0);
-	const gaps = Math.max(0, blocks.length - 1);
-
-	let spacing = gap;
-	if (content + spacing * gaps > available && gaps > 0) {
-		spacing = Math.max(1, (available - content) / gaps);
-	}
-
-	const total = content + spacing * gaps;
-	const scale = total > available ? available / total : 1;
-
-	let cursor = (SIZE - total) / 2;
-	const stack = blocks
-		.map((block) => {
-			const rendered = block.render(cursor);
-			cursor += block.height + spacing;
-			return rendered;
-		})
-		.join("");
-
-	const scaledStack =
-		scale === 1
-			? stack
-			: `<g transform="translate(${SIZE / 2} ${SIZE / 2}) scale(${scale.toFixed(3)}) translate(${-SIZE / 2} ${-SIZE / 2})">${stack}</g>`;
+	const scaledStack = layoutStack(blocks, isRing, gap);
 
 	const ring = isRing ? ringMeter(percent, color, options, opacity) : "";
 
@@ -525,13 +500,46 @@ export function batteryKeyImage(options: FaceOptions): string {
 			? `<path d="M12 6 l-7 12 h5 l-4 10 11 -14 h-5 z" fill="${colors.charging}" fill-opacity="${opacity}" stroke="${colors.background}" stroke-width="1"/>`
 			: "";
 
-	const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
-		<rect width="${SIZE}" height="${SIZE}" fill="${colors.background}"/>
-		${face}
-		${frame}
-		${lowestMark}
-		${bolt}
-	</svg>`;
+	return keyImage(colors.background, `${face}${frame}${lowestMark}${bolt}`);
+}
 
-	return `data:image/svg+xml;charset=utf8,${encodeURIComponent(svg)}`;
+/**
+ * Stacks the blocks vertically, centred as a group, and shrinks the result if it
+ * doesn't fit.
+ *
+ * Enabling everything can ask for more height than the key has (and in ring
+ * style, more than the ring's inner circle). Gaps close first, then the whole
+ * stack scales down uniformly, so a crowded key degrades in proportion rather
+ * than spilling over the edge.
+ */
+function layoutStack(blocks: Block[], isRing: boolean, gap: number): string {
+	// of text near the top or bottom of a circle has far less width than one
+	// across its middle, so the stack is kept to the band where it fits.
+	const available = isRing ? (RING_SIZE - RING_STROKE * 2) * 0.8 : SIZE - 4;
+	const content = blocks.reduce((sum, b) => sum + b.height, 0);
+	const gaps = Math.max(0, blocks.length - 1);
+
+	let spacing = gap;
+	if (content + spacing * gaps > available && gaps > 0) {
+		spacing = Math.max(1, (available - content) / gaps);
+	}
+
+	const total = content + spacing * gaps;
+	const scale = total > available ? available / total : 1;
+
+	let cursor = (SIZE - total) / 2;
+	const stack = blocks
+		.map((block) => {
+			const rendered = block.render(cursor);
+			cursor += block.height + spacing;
+			return rendered;
+		})
+		.join("");
+
+	const scaledStack =
+		scale === 1
+			? stack
+			: `<g transform="translate(${SIZE / 2} ${SIZE / 2}) scale(${scale.toFixed(3)}) translate(${-SIZE / 2} ${-SIZE / 2})">${stack}</g>`;
+
+	return scaledStack;
 }

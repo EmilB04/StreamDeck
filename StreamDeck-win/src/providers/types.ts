@@ -1,9 +1,22 @@
+/**
+ * Note the line between the two "no number" cases, which providers used to draw
+ * differently for the same situation:
+ *
+ *  - "unsupported" is permanent. Asking again will not help, because there is no
+ *    battery here to read, or no way to read it.
+ *  - "not-found" may fix itself. The device is asleep, out of range or switched
+ *    off, and the key backs its polling off rather than probing every cycle.
+ *
+ * A peripheral that's silent behind a dongle that's still plugged in is
+ * "not-found", not "unsupported" — the dongle answering is not the device
+ * answering.
+ */
 export type BatteryStatus =
 	| "ok"
 	| "charging"
 	| "mains" // runs off the cable; there is no battery to report
-	| "unsupported" // device found, but no battery protocol is implemented for it
-	| "not-found" // device no longer connected / not detected
+	| "unsupported" // device found, but it has no battery, or no protocol to read one
+	| "not-found" // not answering now: disconnected, asleep or out of range
 	| "stale" // device is gone; the percentage is the last one that was read
 	| "error";
 
@@ -61,6 +74,28 @@ export interface BatteryProvider {
 	discover(): Promise<DiscoveredDevice[]>;
 	/** Reads a device previously returned by {@link discover}. Never throws. */
 	read(device: DiscoveredDevice): Promise<BatteryReading>;
+}
+
+/**
+ * A whole-number percentage inside 0-100.
+ *
+ * Every provider scales a raw value into a percentage, and each was clamping it
+ * differently — a couple only capped the top, so a decode that went negative
+ * could paint a key below empty.
+ */
+export function clampPercent(value: number): number {
+	if (!Number.isFinite(value)) return 0;
+	return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+/** The device isn't answering right now. It may well be back next poll. */
+export function notFound(deviceLabel: string, detail?: string): BatteryReading {
+	return { deviceLabel, percent: null, status: "not-found", detail };
+}
+
+/** The device is there, but nothing here knows how to read a battery from it. */
+export function unsupported(deviceLabel: string, detail?: string): BatteryReading {
+	return { deviceLabel, percent: null, status: "unsupported", detail };
 }
 
 export function slug(value: string): string {

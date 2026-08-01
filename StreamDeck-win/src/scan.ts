@@ -27,7 +27,9 @@ async function main(): Promise<void> {
 		console.log(`${device.label}`);
 		console.log(`  key      ${device.key}`);
 		console.log(`  provider ${device.providerId}   kind ${device.kind}`);
-		console.log(`  battery  ${level} (${reading?.status ?? "unknown"})${reading?.detail ? ` — ${reading.detail}` : ""}`);
+		console.log(
+			`  battery  ${level} (${reading?.status ?? "unknown"})${reading?.detail ? ` — ${reading.detail}` : ""}`,
+		);
 		console.log("");
 	}
 }

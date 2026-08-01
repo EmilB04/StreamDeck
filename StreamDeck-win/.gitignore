@@ -2,6 +2,8 @@ node_modules/
 com.emilberglund.batterymonitor.sdPlugin/bin/
 com.emilberglund.batterymonitor.sdPlugin/node_modules/
 com.emilberglund.batterymonitor.sdPlugin/logs/
+# The SDK opens a log file as soon as it's imported, including under `npm test`.
+logs/
 *.streamDeckPlugin
 .DS_Store
 

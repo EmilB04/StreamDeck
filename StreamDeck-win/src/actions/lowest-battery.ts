@@ -1,15 +1,14 @@
-import streamDeck, { action } from "@elgato/streamdeck";
+import { action } from "@elgato/streamdeck";
 import type { KeyAction, SendToPluginEvent } from "@elgato/streamdeck";
 import { discovery } from "../providers/discovery";
 import type { BatteryReading, DiscoveredDevice } from "../providers/types";
-import { shareAppearance, sharedAppearance } from "./appearance";
 import type { Face, Reading } from "./key-face";
 import { KeyFaceAction } from "./key-face";
 import { withRenames } from "./renames";
 import type { LowestBatterySettings } from "./settings";
-import { DEFAULTS, extractAppearance, migrate, watchIncludes } from "./settings";
-
-type UiMessage = { event?: string; isRefresh?: boolean };
+import { DEFAULTS, resolved, watchIncludes } from "./settings";
+import type { UiMessage } from "./ui-messages";
+import { replyToPanel } from "./ui-messages";
 
 /**
  * One key for a deskful of devices: whichever has least charge left.
@@ -57,7 +56,7 @@ export class LowestBatteryAction extends KeyFaceAction<LowestBatterySettings> {
 		live: BatteryReading,
 		kind: import("../providers/types").DeviceKind,
 	): Face {
-		const showName = settings.showName ?? DEFAULTS.showName;
+		const showName = resolved(settings).showName;
 		return { reading: live, kind, name: showName ? live.deviceLabel : "", lowest: true };
 	}
 
@@ -66,36 +65,15 @@ export class LowestBatteryAction extends KeyFaceAction<LowestBatterySettings> {
 		return true;
 	}
 
-	protected async ensureDefaults(
-		action: KeyAction<LowestBatterySettings>,
-		settings: LowestBatterySettings,
-	): Promise<LowestBatterySettings> {
-		const migrated = migrate(settings);
-		if (!migrated) return settings;
-
-		// A new key matches the look already shared across the deck, if there is one.
-		const shared = settings.configured ? undefined : await sharedAppearance();
-		const merged = { watch: DEFAULTS.watch, ...migrated, ...(shared ?? {}) } as LowestBatterySettings;
-
-		await action.setSettings(merged);
-		return merged;
+	/** The scope filter is this action's own; everything else comes from the base. */
+	protected override freshDefaults(): Partial<LowestBatterySettings> {
+		return { watch: DEFAULTS.watch };
 	}
 
 	override async onSendToPlugin(ev: SendToPluginEvent<UiMessage, LowestBatterySettings>): Promise<void> {
-		if (ev.payload?.event === "getApps") {
-			await this.sendApps(ev.payload?.isRefresh === true);
-			return;
-		}
-
-		if (ev.payload?.event === "shareAppearance") {
-			const source = this.keys.get(ev.action.id)?.drawn?.settings;
-			if (source) await shareAppearance(extractAppearance(source));
-			return;
-		}
-
 		if (ev.payload?.event === "getStatus") {
 			const drawn = this.keys.get(ev.action.id)?.drawn;
-			await streamDeck.ui.sendToPropertyInspector({
+			await replyToPanel({
 				event: "getStatus",
 				status: drawn
 					? {
@@ -106,7 +84,12 @@ export class LowestBatteryAction extends KeyFaceAction<LowestBatterySettings> {
 						}
 					: null,
 			});
+			return;
 		}
+
+		// getApps and shareAppearance are answered identically by both battery
+		// actions, so they're handled once in the base class.
+		await super.onSendToPlugin(ev);
 	}
 }
 
@@ -120,7 +103,7 @@ function pickLowest(
 	devices: DiscoveredDevice[],
 	settings: LowestBatterySettings,
 ): { device: DiscoveredDevice; reading: BatteryReading } | undefined {
-	const scope = settings.watch ?? DEFAULTS.watch;
+	const scope = resolved(settings).watch;
 	let best: { device: DiscoveredDevice; reading: BatteryReading } | undefined;
 
 	for (const device of devices) {

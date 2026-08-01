@@ -4,23 +4,14 @@ import { discovery } from "../providers/discovery";
 import { findHeadsetControl, HEADSETCONTROL_RELEASES } from "../providers/headsetcontrol";
 import type { BatteryReading, DeviceKind, DiscoveredDevice } from "../providers/types";
 import { noticeKeyImage } from "../ui/battery-svg";
-import { shareAppearance, sharedAppearance } from "./appearance";
-import type { Face, Reading } from "./key-face";
+import type { Face, KeyState, Reading } from "./key-face";
 import { KeyFaceAction } from "./key-face";
 import { labelOf, withRenames } from "./renames";
+import { nextChargeGuess } from "./charging";
 import type { BatterySettings } from "./settings";
-import {
-	DEFAULTS,
-	estimateRemaining,
-	extractAppearance,
-	faceColors,
-	formatDuration,
-	migrate,
-	recordSample,
-} from "./settings";
-
-/** Messages from the property inspector; `isRefresh` comes from its refresh button. */
-type UiMessage = { event?: string; isRefresh?: boolean };
+import type { UiMessage } from "./ui-messages";
+import { replyToPanel } from "./ui-messages";
+import { estimateRemaining, faceColors, formatDuration, recordSample, resolved } from "./settings";
 
 /** Shown on the key when it's pressed while its device isn't connected. */
 const DISCONNECTED_NOTICE = "Device is Disconnected";
@@ -97,23 +88,29 @@ function ageLabel(at: number | undefined): string {
  */
 @action({ UUID: "com.emilberglund.batterymonitor.battery-status" })
 export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
-	/** Device each key was last refreshed for, to spot a changed one. */
-	private readonly devices = new Map<string, string | undefined>();
-	/** Whether the level was last seen rising, per key (see inferCharging). */
-	private readonly rising = new Map<string, boolean>();
+	/**
+	 * The charge guess for a key, created on first use. Lives on {@link KeyState}
+	 * so it's discarded with the rest of the key's state when the key goes away.
+	 */
+	private charge(actionId: string): NonNullable<KeyState<BatterySettings>["charge"]> {
+		const state = this.state(actionId);
+		return (state.charge ??= { rising: false });
+	}
 
 	protected async read(
 		action: KeyAction<BatterySettings>,
 		settings: BatterySettings,
 		force: boolean,
 	): Promise<Reading<BatterySettings>> {
-		this.devices.set(action.id, settings.deviceKey);
+		const charge = this.charge(action.id);
+		charge.deviceKey = settings.deviceKey;
 
 		const device = await this.resolve(action, settings, force);
 		if (!device) {
 			// A device that comes back at a higher level was charged somewhere else,
 			// which isn't the same as charging now.
-			this.rising.set(action.id, false);
+			charge.rising = false;
+			charge.risingSince = undefined;
 			return {
 				settings,
 				kind: settings.deviceKind ?? "other",
@@ -184,7 +181,7 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 		action: KeyAction<BatterySettings>,
 		settings: BatterySettings,
 	): Promise<boolean> {
-		return this.devices.get(action.id) !== settings.deviceKey;
+		return this.state(action.id).charge?.deviceKey !== settings.deviceKey;
 	}
 
 	/**
@@ -211,42 +208,14 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 		}
 	}
 
-	protected async ensureDefaults(
-		action: KeyAction<BatterySettings>,
-		settings: BatterySettings,
-	): Promise<BatterySettings> {
-		const migrated = migrate(settings);
-		if (!migrated) return settings;
-
-		// A key dropped onto a deck that already has a shared look should match it
-		// rather than arrive in the shipped defaults and need setting up again.
-		const shared = settings.configured ? undefined : await sharedAppearance();
-		const merged = { ...migrated, ...(shared ?? {}) };
-
-		await action.setSettings(merged);
-		return merged;
-	}
-
 	override async onSendToPlugin(ev: SendToPluginEvent<UiMessage, BatterySettings>): Promise<void> {
 		if (ev.payload?.event === "getStatus") {
 			await this.sendStatus(ev.action.id);
 			return;
 		}
-		if (ev.payload?.event === "getApps") {
-			await this.sendApps(ev.payload?.isRefresh === true);
-			return;
-		}
 		if (ev.payload?.event === "getHeadsetTool") {
 			const binary = await findHeadsetControl();
-			await streamDeck.ui.sendToPropertyInspector({ event: "getHeadsetTool", installed: binary !== null, binary });
-			return;
-		}
-		if (ev.payload?.event === "shareAppearance") {
-			const source = this.keys.get(ev.action.id)?.drawn?.settings;
-			if (source) {
-				await shareAppearance(extractAppearance(source));
-				streamDeck.logger.info("battery-status: appearance shared with every key");
-			}
+			await replyToPanel({ event: "getHeadsetTool", installed: binary !== null, binary });
 			return;
 		}
 		if (ev.payload?.event === "openHeadsetTool") {
@@ -255,7 +224,12 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 			await streamDeck.system.openUrl(HEADSETCONTROL_RELEASES);
 			return;
 		}
-		if (ev.payload?.event !== "getDevices") return;
+		// getApps and shareAppearance are answered identically by both battery
+		// actions, so they're handled once in the base class.
+		if (ev.payload?.event !== "getDevices") {
+			await super.onSendToPlugin(ev);
+			return;
+		}
 
 		const force = ev.payload?.isRefresh === true;
 		streamDeck.logger.info(`battery-status: property inspector requested devices (force=${force})`);
@@ -277,7 +251,7 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 			items.push({ label: "No devices detected — press the refresh button", value: "" });
 		}
 
-		await streamDeck.ui.sendToPropertyInspector({ event: "getDevices", items });
+		await replyToPanel({ event: "getDevices", items });
 	}
 
 	/**
@@ -289,7 +263,7 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 	private async sendStatus(actionId: string): Promise<void> {
 		const drawn = this.keys.get(actionId)?.drawn;
 		if (!drawn) {
-			await streamDeck.ui.sendToPropertyInspector({ event: "getStatus", status: null });
+			await replyToPanel({ event: "getStatus", status: null });
 			return;
 		}
 
@@ -297,7 +271,7 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 		const reading = this.forPowerSource(settings, this.withLastKnown(settings, drawn.reading));
 		const age = ageLabel(this.keys.get(actionId)?.lastLiveAt ?? settings.lastSeenAt);
 
-		await streamDeck.ui.sendToPropertyInspector({
+		await replyToPanel({
 			event: "getStatus",
 			status: {
 				label: this.label(settings, reading),
@@ -369,8 +343,9 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 	 * level that has risen since the last reading is the one thing that can't
 	 * happen off a charger, so that's the signal; it stays set while the level
 	 * holds (a phone parked at 100% is still plugged in) and clears when the level
-	 * drops. It's a guess, and it's wrong in one case: unplugging at a level the
-	 * device then holds keeps the bolt until the first drop.
+	 * drops. It's a guess, and below 100% it's time-boxed too — see
+	 * CHARGE_HOLD_MS — otherwise unplugging at a level the device then holds
+	 * would keep the bolt for as long as the device is slow to lose that level.
 	 */
 	private inferCharging(
 		actionId: string,
@@ -382,13 +357,12 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 		if (provider?.reportsCharging !== false) return reading;
 		if (reading.status !== "ok" || reading.percent === null) return reading;
 
-		const previous = settings.lastPercent;
-		if (previous !== undefined) {
-			if (reading.percent > previous) this.rising.set(actionId, true);
-			else if (reading.percent < previous) this.rising.set(actionId, false);
-		}
+		const state = this.state(actionId);
+		const next = nextChargeGuess(this.charge(actionId), settings.lastPercent, reading.percent, Date.now());
+		state.charge = next;
 
-		if (!this.rising.get(actionId)) return reading;
+		if (!next.rising) return reading;
+
 		return { ...reading, status: "charging", detail: "Level rising — assumed to be charging" };
 	}
 
@@ -400,7 +374,7 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 	 */
 	private withLastKnown(settings: BatterySettings, reading: BatteryReading): BatteryReading {
 		if (reading.percent !== null) return reading;
-		if (!(settings.showLastKnown ?? DEFAULTS.showLastKnown)) return reading;
+		if (!resolved(settings).showLastKnown) return reading;
 		if (reading.status === "mains") return reading;
 
 		// A stored level is the proof that matters. "unsupported" normally means
@@ -428,7 +402,7 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 	 * only the user knows which one is on the desk.
 	 */
 	private forPowerSource(settings: BatterySettings, reading: BatteryReading): BatteryReading {
-		if ((settings.powerSource ?? DEFAULTS.powerSource) !== "mains") return reading;
+		if (resolved(settings).powerSource !== "mains") return reading;
 		if (reading.status === "mains") return reading;
 		return { deviceLabel: reading.deviceLabel, percent: null, status: "mains", detail: "Always plugged in" };
 	}
@@ -481,7 +455,7 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 	 * "Nickname" is the single place a key is named.
 	 */
 	private nameLine(settings: BatterySettings, reading: BatteryReading, lastLiveAt?: number): string {
-		if (!(settings.showName ?? DEFAULTS.showName)) return "";
+		if (!resolved(settings).showName) return "";
 		return this.deviceLine(settings, reading, lastLiveAt);
 	}
 
@@ -508,7 +482,7 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 		}
 
 		if (reading.status !== "stale") return label;
-		if (!(settings.showOfflineAge ?? DEFAULTS.showOfflineAge)) return label;
+		if (!resolved(settings).showOfflineAge) return label;
 
 		// In-memory first: it's exact. The persisted stamp is the fallback after a
 		// restart, when nothing in memory knows when the device was last seen.

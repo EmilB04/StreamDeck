@@ -1,8 +1,8 @@
-import type { Device as HidDeviceInfo, HID as HidDevice } from "node-hid";
-import { hidDevices, loadHid } from "./hid";
+import type { Device as HidDeviceInfo } from "node-hid";
+import { hidDevices, withHidDevice } from "./hid";
 import { log } from "./log";
 import type { BatteryProvider, BatteryReading, DeviceKind, DiscoveredDevice } from "./types";
-import { hex4 } from "./types";
+import { clampPercent, hex4, notFound } from "./types";
 
 const VENDOR_RAZER = 0x1532;
 
@@ -93,12 +93,9 @@ export class RazerProvider implements BatteryProvider {
 
 			device.reading = answer
 				? answer.reading
-				: {
-						deviceLabel: label,
-						percent: null,
-						status: "unsupported",
-						detail: "Detected, but it didn't answer the Razer power command",
-					};
+				: // Silent rather than batteryless — the device may simply be asleep,
+					// so this reads as absent and lets the poll back off.
+					notFound(label, "Detected, but it didn't answer the Razer power command");
 
 			found.push(device);
 		}
@@ -119,14 +116,7 @@ export class RazerProvider implements BatteryProvider {
 		const known = Number(device.locator.transactionId);
 		const answer = await this.findChannel(interfaces, known >= 0 ? [known] : undefined);
 
-		return (
-			answer?.reading ?? {
-				deviceLabel: device.label,
-				percent: null,
-				status: "unsupported",
-				detail: "Device didn't answer the Razer power command",
-			}
-		);
+		return answer?.reading ?? notFound(device.label, "Device didn't answer the Razer power command");
 	}
 
 	/** Finds an interface and transaction id that answer, and reads the battery. */
@@ -134,26 +124,23 @@ export class RazerProvider implements BatteryProvider {
 		interfaces: HidDeviceInfo[],
 		transactionIds: number[] = TRANSACTION_IDS,
 	): Promise<{ transactionId: number; reading: BatteryReading } | undefined> {
-		const HID = await loadHid();
-		if (!HID) return undefined;
-
 		const label = (interfaces.find((i) => i.product)?.product ?? "Razer device").trim();
 
 		for (const info of interfaces) {
 			for (const transactionId of transactionIds) {
-				const level = await this.exchange(HID, info, transactionId, CMD_BATTERY);
+				const level = await this.exchange(info, transactionId, CMD_BATTERY);
 				if (level === undefined) continue;
 
 				// A sleeping device answers 0; that's "no reading", not "flat".
-				const percent = Math.round((level / 255) * 100);
+				const percent = clampPercent((level / 255) * 100);
 				if (percent <= 0) continue;
 
-				const charging = await this.exchange(HID, info, transactionId, CMD_CHARGING);
+				const charging = await this.exchange(info, transactionId, CMD_CHARGING);
 				return {
 					transactionId,
 					reading: {
 						deviceLabel: label,
-						percent: Math.min(100, percent),
+						percent,
 						status: charging ? "charging" : "ok",
 					},
 				};
@@ -164,16 +151,10 @@ export class RazerProvider implements BatteryProvider {
 	}
 
 	/** Sends one power command and returns the byte the device answers with. */
-	private async exchange(
-		HID: NonNullable<Awaited<ReturnType<typeof loadHid>>>,
-		info: HidDeviceInfo,
-		transactionId: number,
-		commandId: number,
-	): Promise<number | undefined> {
-		let device: HidDevice | undefined;
-
-		try {
-			device = new HID.HID(info.path!);
+	private async exchange(info: HidDeviceInfo, transactionId: number, commandId: number): Promise<number | undefined> {
+		// undefined on a failure to open: the wrong interface for this protocol,
+		// or a device busy elsewhere, which is what the probe loop expects.
+		return withHidDevice<number | undefined>(info.path!, undefined, async (device) => {
 			device.sendFeatureReport([REPORT_ID, ...buildReport(transactionId, commandId)]);
 
 			await sleep(REPLY_DELAY_MS);
@@ -187,16 +168,7 @@ export class RazerProvider implements BatteryProvider {
 			if (status !== STATUS_OK || commandClass !== CLASS_POWER || answeredId !== commandId) return undefined;
 
 			return reply[10];
-		} catch {
-			// Wrong interface for this protocol, or the device is busy elsewhere.
-			return undefined;
-		} finally {
-			try {
-				device?.close();
-			} catch {
-				/* already closed */
-			}
-		}
+		});
 	}
 }
 

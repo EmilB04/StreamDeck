@@ -146,5 +146,8 @@ function sameDevice(a: string, b: string): boolean {
 }
 
 function normalize(label: string): string {
-	return label.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+	return label
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, " ")
+		.trim();
 }

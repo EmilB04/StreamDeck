@@ -34,7 +34,12 @@ streamDeck.settings.onDidReceiveGlobalSettings<GlobalSettings>((ev) => {
 // Only after connecting: getGlobalSettings is a request to Stream Deck, and
 // issuing one before the socket exists leaves every later request queued behind
 // it — which showed up as every key's poll timing out, not as an error here.
-streamDeck.connect().then(async () => {
-	await loadRenames(true);
-	streamDeck.logger.info("plugin: connected, renames loaded");
-});
+streamDeck
+	.connect()
+	.then(async () => {
+		await loadRenames(true);
+		streamDeck.logger.info("plugin: connected, renames loaded");
+	})
+	// Without this a failure here is an unhandled rejection: the plugin keeps
+	// running with no renames loaded and nothing said so.
+	.catch((err) => streamDeck.logger.error("plugin: connecting failed", err));

@@ -1,7 +1,7 @@
-import type { Device as HidDeviceInfo, HID as HidDevice } from "node-hid";
-import { hidDevices, loadHid } from "./hid";
+import type { Device as HidDeviceInfo } from "node-hid";
+import { hidDevices, withHidDevice } from "./hid";
 import type { BatteryProvider, BatteryReading, DiscoveredDevice } from "./types";
-import { hex4, slug } from "./types";
+import { clampPercent, hex4, slug } from "./types";
 
 const VENDOR_SONY = 0x054c;
 
@@ -167,15 +167,11 @@ export class DualSenseProvider implements BatteryProvider {
 	 * returns its status byte.
 	 */
 	private async readStatusByte(info: HidDeviceInfo, family: PadFamily): Promise<number | null> {
-		const HID = await loadHid();
-		if (!HID) return null;
-
 		const overBluetooth = BLUETOOTH_PATH.test(info.path ?? "");
-		let device: HidDevice | undefined;
 
-		try {
-			device = new HID.HID(info.path!);
-
+		// null on a failure to open: busy, disconnected mid-read, or no permission
+		// for this interface.
+		return withHidDevice<number | null>(info.path!, null, (device) => {
 			let askedForFullReports = false;
 
 			for (let attempt = 0; attempt < READ_ATTEMPTS; attempt++) {
@@ -202,16 +198,7 @@ export class DualSenseProvider implements BatteryProvider {
 			}
 
 			return null;
-		} catch {
-			// Busy, disconnected mid-read, or no permission for this interface.
-			return null;
-		} finally {
-			try {
-				device?.close();
-			} catch {
-				/* already closed */
-			}
-		}
+		});
 	}
 }
 
@@ -245,10 +232,10 @@ export function decodeDualShock4(status: number, label: string): BatteryReading 
 		if (level >= 11) {
 			return { deviceLabel: label, percent: 100, status: "charging", detail: "Charge complete" };
 		}
-		return { deviceLabel: label, percent: Math.min(100, Math.round((level / 11) * 100)), status: "charging" };
+		return { deviceLabel: label, percent: clampPercent((level / 11) * 100), status: "charging" };
 	}
 
-	return { deviceLabel: label, percent: Math.min(100, Math.round((level / 10) * 100)), status: "ok" };
+	return { deviceLabel: label, percent: clampPercent((level / 10) * 100), status: "ok" };
 }
 
 /**
@@ -259,7 +246,7 @@ export function decodeDualShock4(status: number, label: string): BatteryReading 
 export function decodeStatus(status: number, label: string): BatteryReading {
 	const level = status & 0x0f;
 	const state = (status >> 4) & 0x0f;
-	const percent = Math.min(level * 10 + 5, 100);
+	const percent = clampPercent(level * 10 + 5);
 
 	// Both charge states mean the cable is attached, so both show the charging
 	// indicator — the same call logitech.ts makes for its "charge complete".

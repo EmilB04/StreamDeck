@@ -9,18 +9,27 @@
     "deploy": "npm run build && node scripts/deploy.mjs",
     "sync-deps": "node scripts/sync-runtime-deps.mjs",
     "scan": "node com.emilberglund.batterymonitor.sdPlugin/bin/scan.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint src test",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
+    "pretest": "node -e \"require('node:fs').rmSync('.test-build',{recursive:true,force:true})\"",
     "test": "tsc -p tsconfig.test.json && node --test \".test-build/test/*.test.js\""
   },
   "devDependencies": {
     "@elgato/cli": "^0.3.0",
+    "@eslint/js": "^10.0.1",
     "@rollup/plugin-commonjs": "^28.0.0",
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^15.3.0",
     "@rollup/plugin-typescript": "^12.1.0",
     "@types/node": "^20.19.43",
+    "eslint": "^10.8.0",
+    "prettier": "^3.9.6",
     "rollup": "^4.24.0",
     "tslib": "^2.7.0",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.65.0"
   },
   "dependencies": {
     "@elgato/streamdeck": "^2.1.0",

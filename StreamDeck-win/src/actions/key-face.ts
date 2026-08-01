@@ -1,12 +1,22 @@
 import streamDeck, { SingletonAction } from "@elgato/streamdeck";
-import type { DidReceiveSettingsEvent, KeyAction, KeyDownEvent, WillAppearEvent, WillDisappearEvent } from "@elgato/streamdeck";
+import type {
+	DidReceiveSettingsEvent,
+	KeyAction,
+	KeyDownEvent,
+	SendToPluginEvent,
+	WillAppearEvent,
+	WillDisappearEvent,
+} from "@elgato/streamdeck";
 import type { BatteryReading, DeviceKind } from "../providers/types";
 import { batteryKeyImage } from "../ui/battery-svg";
-import { applyAppearance } from "./appearance";
+import { applyAppearance, shareAppearance, sharedAppearance } from "./appearance";
 import { listApps } from "./apps";
 import { openTarget } from "./launch";
+import type { ChargeGuess } from "./charging";
 import type { Appearance, BatterySettings, PollMode } from "./settings";
-import { DEFAULTS, faceColors, nextPollSeconds, refreshSeconds } from "./settings";
+import { extractAppearance, faceColors, migrate, nextPollSeconds, refreshSeconds, resolved } from "./settings";
+import type { UiMessage } from "./ui-messages";
+import { replyToPanel } from "./ui-messages";
 
 /** Charging pulse: 8 steps of 450ms, i.e. a slow ~3.6s breath. */
 const PULSE_INTERVAL_MS = 450;
@@ -62,6 +72,12 @@ export type KeyState<TSettings> = {
 	/** A message owns the key; painting is suspended until it clears. */
 	showingNotice?: boolean;
 	noticeTimer?: NodeJS.Timeout;
+	/**
+	 * Whether this key's device looks like it's charging, for a provider that
+	 * can't say so itself. Lives here so it's discarded with everything else when
+	 * the key goes away — see {@link ChargeGuess}.
+	 */
+	charge?: ChargeGuess;
 };
 
 /**
@@ -77,7 +93,11 @@ export abstract class KeyFaceAction<TSettings extends BatterySettings> extends S
 	protected readonly keys = new Map<string, KeyState<TSettings>>();
 
 	/** Where the reading comes from. Called on every poll and on every press. */
-	protected abstract read(action: KeyAction<TSettings>, settings: TSettings, force: boolean): Promise<Reading<TSettings>>;
+	protected abstract read(
+		action: KeyAction<TSettings>,
+		settings: TSettings,
+		force: boolean,
+	): Promise<Reading<TSettings>>;
 
 	/**
 	 * How the reading is presented: the substitutions a subclass wants applied
@@ -95,8 +115,50 @@ export abstract class KeyFaceAction<TSettings extends BatterySettings> extends S
 		return reading.deviceLabel;
 	}
 
-	/** Settings written the first time a key appears; subclasses add their own. */
-	protected abstract ensureDefaults(action: KeyAction<TSettings>, settings: TSettings): Promise<TSettings>;
+	/**
+	 * Extra defaults a subclass wants written into a brand-new key, on top of the
+	 * migration every key gets. Empty for a key that has nothing of its own.
+	 */
+	protected freshDefaults(): Partial<TSettings> {
+		return {};
+	}
+
+	/**
+	 * Settings written the first time a key appears: the migration, plus the look
+	 * already shared across the deck if there is one.
+	 *
+	 * A key dropped onto a deck that has a shared appearance should match it
+	 * rather than arrive in the shipped defaults and need setting up again.
+	 */
+	protected async ensureDefaults(action: KeyAction<TSettings>, settings: TSettings): Promise<TSettings> {
+		const migrated = migrate(settings);
+		if (!migrated) return settings;
+
+		const shared = settings.configured ? undefined : await sharedAppearance();
+		const merged = { ...this.freshDefaults(), ...migrated, ...(shared ?? {}) };
+
+		await action.setSettings(merged);
+		return merged;
+	}
+
+	/**
+	 * The panel requests both battery actions answer the same way. A subclass
+	 * overrides this for its own events and calls `super` for the rest.
+	 */
+	override async onSendToPlugin(ev: SendToPluginEvent<UiMessage, TSettings>): Promise<void> {
+		if (ev.payload?.event === "getApps") {
+			await this.sendApps(ev.payload?.isRefresh === true);
+			return;
+		}
+
+		if (ev.payload?.event === "shareAppearance") {
+			const source = this.keys.get(ev.action.id)?.drawn?.settings;
+			if (source) {
+				await shareAppearance(extractAppearance(source));
+				streamDeck.logger.info(`${this.constructor.name}: appearance shared with every key`);
+			}
+		}
+	}
 
 	override async onWillAppear(ev: WillAppearEvent<TSettings>): Promise<void> {
 		if (!ev.action.isKey()) return;
@@ -142,7 +204,7 @@ export abstract class KeyFaceAction<TSettings extends BatterySettings> extends S
 
 		// Restarting the timer on every keystroke would keep pushing the next poll
 		// out of reach, so only do it when the interval or the mode changed.
-		const mode = settings.pollMode ?? DEFAULTS.pollMode;
+		const mode = resolved(settings).pollMode;
 		if (state.pollBase !== refreshSeconds(settings) || state.pollMode !== mode) {
 			this.schedule(ev.action, settings);
 		}
@@ -172,7 +234,7 @@ export abstract class KeyFaceAction<TSettings extends BatterySettings> extends S
 		const apps = await listApps(force);
 		const items = apps.map((app) => ({ label: app.name, value: app.target }));
 		items.unshift({ label: "Don't open anything", value: "" });
-		await streamDeck.ui.sendToPropertyInspector({ event: "getApps", items });
+		await replyToPanel({ event: "getApps", items });
 	}
 
 	/**
@@ -184,24 +246,28 @@ export abstract class KeyFaceAction<TSettings extends BatterySettings> extends S
 		clearTimeout(state.pollTimer);
 
 		state.pollBase = refreshSeconds(settings);
-		state.pollMode = settings.pollMode ?? DEFAULTS.pollMode;
+		state.pollMode = resolved(settings).pollMode;
 
 		const seconds = nextPollSeconds(settings, state.drawn?.reading, state.unchanged);
 		state.pollTimer = setTimeout(() => {
 			// Read the settings fresh on every tick. Closing over the settings from
 			// when the timer was created would repaint with a stale appearance,
 			// silently undoing any edit made since.
+			// Whatever the tick managed to read, so a failure after the fetch still
+			// rearms from current settings rather than the ones this timer was
+			// created with — reviving a poll interval the user has since changed.
+			let latest = settings;
 			action
 				.getSettings()
 				.then(async (current) => {
+					latest = current;
 					await this.refresh(action, current);
-					this.schedule(action, current);
 				})
 				.catch((err) => {
 					streamDeck.logger.error(`${this.constructor.name}: scheduled refresh failed`, err);
-					// Keep the chain alive; a failed tick shouldn't stop the key updating.
-					this.schedule(action, settings);
-				});
+				})
+				// Keep the chain alive; a failed tick shouldn't stop the key updating.
+				.finally(() => this.schedule(action, latest));
 		}, seconds * 1000);
 	}
 
@@ -235,7 +301,7 @@ export abstract class KeyFaceAction<TSettings extends BatterySettings> extends S
 		settings: TSettings,
 		reading: BatteryReading,
 	): Promise<void> {
-		const alertBelow = settings.alertBelow ?? DEFAULTS.alertBelow;
+		const alertBelow = resolved(settings).alertBelow;
 		const state = this.state(action.id);
 
 		if (alertBelow <= 0 || reading.percent === null || reading.status === "stale") return;
@@ -324,6 +390,7 @@ export abstract class KeyFaceAction<TSettings extends BatterySettings> extends S
 		if (this.state(action.id).showingNotice) return;
 
 		const face = this.present(action, settings, live, kind);
+		const look = resolved(settings);
 
 		await action.setImage(
 			batteryKeyImage({
@@ -331,12 +398,12 @@ export abstract class KeyFaceAction<TSettings extends BatterySettings> extends S
 				status: face.reading.status,
 				kind: face.kind,
 				name: face.name,
-				style: settings.style ?? DEFAULTS.style,
-				showIcon: settings.showIcon ?? DEFAULTS.showIcon,
-				showPercent: settings.showPercent ?? DEFAULTS.showPercent,
+				style: look.style,
+				showIcon: look.showIcon,
+				showPercent: look.showPercent,
 				showName: face.name !== "",
-				lowThreshold: settings.lowThreshold ?? DEFAULTS.lowThreshold,
-				mediumThreshold: settings.mediumThreshold ?? DEFAULTS.mediumThreshold,
+				lowThreshold: look.lowThreshold,
+				mediumThreshold: look.mediumThreshold,
 				colors: faceColors(settings),
 				lowest: face.lowest,
 				// Sine so the breath eases at both ends instead of ramping linearly.
@@ -363,7 +430,7 @@ export abstract class KeyFaceAction<TSettings extends BatterySettings> extends S
 		settings: TSettings,
 		reading: BatteryReading,
 	): Promise<void> {
-		const mode = settings.titleMode ?? DEFAULTS.titleMode;
+		const mode = resolved(settings).titleMode;
 
 		let wanted: string | undefined;
 		if (mode === "device") {

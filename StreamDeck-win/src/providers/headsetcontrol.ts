@@ -2,11 +2,27 @@ import { execFile } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { coalesce } from "./coalesce";
+import { log } from "./log";
 import type { BatteryProvider, BatteryReading, DiscoveredDevice } from "./types";
-import { slug } from "./types";
+import { clampPercent, slug } from "./types";
+
+/** Shared by the provider and the free functions its parsing was split into. */
+const PROVIDER_ID = "headset";
 
 const execFileAsync = promisify(execFile);
 const TIMEOUT_MS = 6000;
+
+/**
+ * How long one CLI result is reused. Short for the same reason as its Bluetooth
+ * counterpart: it collapses the rescan-then-read pair a single key press causes,
+ * without holding a level long enough for anyone to see it go stale.
+ *
+ * {@link findHeadsetControl} deliberately doesn't share this — the panel calls it
+ * to answer "is the tool installed?", and someone who has just installed it and
+ * hit refresh needs a real answer, not a cached "no".
+ */
+const RUN_TTL_MS = 2000;
 
 /**
  * Candidate locations for the HeadsetControl binary, tried in order. A bare
@@ -48,7 +64,7 @@ export const HEADSETCONTROL_RELEASES = "https://github.com/Sapd/HeadsetControl/r
 export async function findHeadsetControl(): Promise<string | null> {
 	for (const binary of candidateBinaries()) {
 		try {
-			await execFileAsync(binary, ["--help"], { timeout: TIMEOUT_MS });
+			await execFileAsync(binary, ["--help"], { timeout: TIMEOUT_MS, windowsHide: true });
 			return binary;
 		} catch (err: any) {
 			// Anything other than "no such file" means it's there and answered.
@@ -56,6 +72,18 @@ export async function findHeadsetControl(): Promise<string | null> {
 		}
 	}
 	return null;
+}
+
+/**
+ * A JSON field as a string, or "" for anything that isn't one.
+ *
+ * HeadsetControl's output shape has changed across releases (see {@link
+ * HeadsetControlProvider.parse}), so a field that's a string today may be an
+ * object or a number tomorrow. Coercing here keeps a surprise from reaching
+ * `slug()` or a `.trim()` further down, where it would throw.
+ */
+function text(value: unknown): string {
+	return typeof value === "string" ? value : "";
 }
 
 /**
@@ -68,12 +96,19 @@ export async function findHeadsetControl(): Promise<string | null> {
  * here, so plugging in a different supported headset just makes it show up.
  */
 export class HeadsetControlProvider implements BatteryProvider {
-	readonly id = "headset";
+	readonly id = PROVIDER_ID;
 
 	async discover(): Promise<DiscoveredDevice[]> {
 		const output = await this.run();
 		if (!output.ok) return [];
-		return this.parse(output.stdout);
+		try {
+			return parseDevices(output.stdout);
+		} catch (err) {
+			// The contract is that a scan never throws: one provider tripping over an
+			// unfamiliar payload must not cost the user every other device.
+			log.warn(`headsetcontrol: could not read the device list: ${String(err)}`);
+			return [];
+		}
 	}
 
 	async read(device: DiscoveredDevice): Promise<BatteryReading> {
@@ -83,19 +118,36 @@ export class HeadsetControlProvider implements BatteryProvider {
 			return { deviceLabel: label, percent: null, status: "error", detail: output.detail };
 		}
 
-		const match = this.parse(output.stdout).find((d) => d.key === device.key);
+		let match: DiscoveredDevice | undefined;
+		try {
+			match = parseDevices(output.stdout).find((d) => d.key === device.key);
+		} catch (err) {
+			log.warn(`headsetcontrol: could not read ${device.key}: ${String(err)}`);
+			return { deviceLabel: label, percent: null, status: "error", detail: "Unreadable HeadsetControl output" };
+		}
+
 		if (!match?.reading) {
 			return { deviceLabel: label, percent: null, status: "not-found", detail: "Headset offline or asleep" };
 		}
 		return match.reading;
 	}
 
+	/**
+	 * One CLI run serves every key. `-b` already reports every headset it can
+	 * see, so asking once per key only multiplied the process count — and each
+	 * ask re-probed the candidate paths before it could even start.
+	 */
+	private readonly run = coalesce(() => this.exec(), RUN_TTL_MS);
+
 	/** Runs the CLI at the first candidate path that exists. */
-	private async run(): Promise<{ ok: true; stdout: string } | { ok: false; detail: string }> {
+	private async exec(): Promise<{ ok: true; stdout: string } | { ok: false; detail: string }> {
 		let lastError: string | undefined;
 		for (const binary of candidateBinaries()) {
 			try {
-				const { stdout } = await execFileAsync(binary, ["-o", "JSON", "-b"], { timeout: TIMEOUT_MS });
+				const { stdout } = await execFileAsync(binary, ["-o", "JSON", "-b"], {
+					timeout: TIMEOUT_MS,
+					windowsHide: true,
+				});
 				return { ok: true, stdout };
 			} catch (err: any) {
 				// ENOENT just means this candidate path doesn't exist — try the next one.
@@ -110,92 +162,91 @@ export class HeadsetControlProvider implements BatteryProvider {
 
 		return {
 			ok: false,
-			detail:
-				lastError ?? "HeadsetControl not found. Install it: https://github.com/Sapd/HeadsetControl/releases",
+			detail: lastError ?? "HeadsetControl not found. Install it: https://github.com/Sapd/HeadsetControl/releases",
 		};
 	}
+}
 
-	/**
-	 * Accepts both the v3 shape (`{devices:[{device,vendor,product,battery:{...}}]}`)
-	 * and the older nested one (`{devices:[{device,status:{battery:{...}}}]}`).
-	 */
-	private parse(stdout: string): DiscoveredDevice[] {
-		let json: any;
-		try {
-			json = JSON.parse(stdout);
-		} catch {
-			// Very old builds print plain text like "Battery: 75%". No device name
-			// to key off, so expose it as a single generic entry.
-			const match = stdout.match(/(\d{1,3})\s*%/);
-			if (!match) return [];
-			const label = "Headset";
-			return [
-				{
-					key: "headset:unknown",
-					providerId: this.id,
-					label,
-					kind: "headset",
-					supportsBattery: true,
-					locator: {},
-					reading: { deviceLabel: label, percent: Number(match[1]), status: "ok" },
-				},
-			];
-		}
-
-		const raw: any[] = Array.isArray(json?.devices) ? json.devices : Array.isArray(json) ? json : [json];
-
-		return raw
-			.filter((d) => d && typeof d === "object")
-			.map((d) => this.toDevice(d))
-			.filter((d): d is DiscoveredDevice => d !== null);
+/**
+ * Accepts both the v3 shape (`{devices:[{device,vendor,product,battery:{...}}]}`)
+ * and the older nested one (`{devices:[{device,status:{battery:{...}}}]}`).
+ */
+export function parseDevices(stdout: string): DiscoveredDevice[] {
+	let json: any;
+	try {
+		json = JSON.parse(stdout);
+	} catch {
+		// Very old builds print plain text like "Battery: 75%". No device name
+		// to key off, so expose it as a single generic entry.
+		const match = stdout.match(/(\d{1,3})\s*%/);
+		if (!match) return [];
+		const label = "Headset";
+		return [
+			{
+				key: "headset:unknown",
+				providerId: PROVIDER_ID,
+				label,
+				kind: "headset",
+				supportsBattery: true,
+				locator: {},
+				reading: { deviceLabel: label, percent: Number(match[1]), status: "ok" },
+			},
+		];
 	}
 
-	private toDevice(raw: any): DiscoveredDevice | null {
-		const vendor: string | undefined = raw.vendor;
-		const product: string | undefined = raw.product;
-		const label: string =
-			raw.device || [vendor, product].filter(Boolean).join(" ") || raw.name || "Headset";
+	const raw: any[] = Array.isArray(json?.devices) ? json.devices : Array.isArray(json) ? json : [json];
 
-		const idVendor: string | undefined = raw.id_vendor ?? raw.idVendor;
-		const idProduct: string | undefined = raw.id_product ?? raw.idProduct;
-		const key =
-			idVendor && idProduct ? `headset:${idVendor}:${idProduct}` : `headset:${slug(label) || "unknown"}`;
+	return raw
+		.filter((d) => d && typeof d === "object")
+		.map((d) => toDevice(d))
+		.filter((d): d is DiscoveredDevice => d !== null);
+}
 
-		return {
-			key,
-			providerId: this.id,
-			label,
-			kind: "headset",
-			supportsBattery: true,
-			locator: { idVendor: idVendor ?? "", idProduct: idProduct ?? "" },
-			reading: this.toReading(label, raw),
-		};
+export function toDevice(raw: any): DiscoveredDevice | null {
+	const vendor = text(raw.vendor);
+	const product = text(raw.product);
+	const label = text(raw.device) || [vendor, product].filter(Boolean).join(" ") || text(raw.name) || "Headset";
+
+	const idVendor = text(raw.id_vendor ?? raw.idVendor);
+	const idProduct = text(raw.id_product ?? raw.idProduct);
+	const key = idVendor && idProduct ? `headset:${idVendor}:${idProduct}` : `headset:${slug(label) || "unknown"}`;
+
+	return {
+		key,
+		providerId: PROVIDER_ID,
+		label,
+		kind: "headset",
+		supportsBattery: true,
+		locator: { idVendor, idProduct },
+		reading: toReading(label, raw),
+	};
+}
+
+export function toReading(label: string, raw: any): BatteryReading | undefined {
+	const battery = raw.battery ?? raw.status?.battery;
+	if (!battery || typeof battery !== "object") return undefined;
+	if (battery.level === undefined || battery.level === null) return undefined;
+
+	// HeadsetControl explains itself ("Device is offline or not responding"),
+	// which beats anything we'd guess at.
+	const reported = text(raw.errors?.battery);
+	const offline = reported
+		? `Headset offline: ${reported}`
+		: "Headset offline or asleep — the dongle is connected but the headset isn't answering";
+
+	const status: string = String(battery.status ?? "");
+	if (status === "BATTERY_UNAVAILABLE" || status === "BATTERY_TIMEOUT" || status === "BATTERY_HIDERROR") {
+		return { deviceLabel: label, percent: null, status: "not-found", detail: offline };
 	}
 
-	private toReading(label: string, raw: any): BatteryReading | undefined {
-		const battery = raw.battery ?? raw.status?.battery;
-		if (!battery || battery.level === undefined || battery.level === null) return undefined;
-
-		// HeadsetControl explains itself ("Device is offline or not responding"),
-		// which beats anything we'd guess at.
-		const offline = raw.errors?.battery
-			? `Headset offline: ${raw.errors.battery}`
-			: "Headset offline or asleep — the dongle is connected but the headset isn't answering";
-
-		const status: string = String(battery.status ?? "");
-		if (status === "BATTERY_UNAVAILABLE" || status === "BATTERY_TIMEOUT" || status === "BATTERY_HIDERROR") {
-			return { deviceLabel: label, percent: null, status: "not-found", detail: offline };
-		}
-
-		const percent = Number(battery.level);
-		if (!Number.isFinite(percent) || percent < 0) {
-			return { deviceLabel: label, percent: null, status: "not-found", detail: offline };
-		}
-
-		return {
-			deviceLabel: label,
-			percent: Math.min(100, Math.round(percent)),
-			status: status === "BATTERY_CHARGING" ? "charging" : "ok",
-		};
+	const percent = Number(battery.level);
+	if (!Number.isFinite(percent) || percent < 0) {
+		return { deviceLabel: label, percent: null, status: "not-found", detail: offline };
 	}
+
+	return {
+		deviceLabel: label,
+		percent: clampPercent(percent),
+		status: status === "BATTERY_CHARGING" ? "charging" : "ok",
+	};
 }

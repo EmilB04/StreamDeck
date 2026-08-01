@@ -15,7 +15,6 @@ export type PollMode = "fixed" | "adaptive";
  */
 export type PowerSource = "auto" | "mains";
 
-
 export type BatterySettings = {
 	/** Stable key of a device found by discovery (see providers/discovery.ts). */
 	deviceKey?: string;
@@ -250,6 +249,29 @@ export const DEFAULTS = {
 	alertBelow: 0,
 };
 
+/** A key's settings with every defaulted field filled in. */
+export type Resolved<T extends BatterySettings> = T & typeof DEFAULTS;
+
+/**
+ * Settings with the defaults applied, once, so the rest of the code can read a
+ * field instead of remembering which default belongs to it.
+ *
+ * `?? DEFAULTS.x` was written out at eighteen call sites across three files,
+ * which is eighteen chances to reach for the wrong default or forget one — and
+ * a key whose settings predate a field relies on exactly that fallback.
+ *
+ * Explicit `undefined` is treated as absent: Stream Deck round-trips settings
+ * through JSON, and a cleared control comes back as a present-but-undefined key
+ * that would otherwise overwrite the default with nothing.
+ */
+export function resolved<T extends BatterySettings>(settings: T): Resolved<T> {
+	const set: Record<string, unknown> = {};
+	for (const [key, value] of Object.entries(settings)) {
+		if (value !== undefined) set[key] = value;
+	}
+	return { ...DEFAULTS, ...set } as Resolved<T>;
+}
+
 /**
  * Brings a key's settings up to the current version, writing the appearance
  * defaults out the first time so the property inspector's controls start out
@@ -258,11 +280,11 @@ export const DEFAULTS = {
  * Returns undefined when the settings are already current, i.e. when there is
  * nothing to persist.
  */
-export function migrate(settings: BatterySettings): BatterySettings | undefined {
+export function migrate<T extends BatterySettings>(settings: T): (T & BatterySettings) | undefined {
 	const version = settings.settingsVersion ?? (settings.configured ? 1 : 0);
 	if (settings.configured && version >= SETTINGS_VERSION) return undefined;
 
-	const migrated: BatterySettings = { ...settings };
+	const migrated: T & BatterySettings = { ...settings };
 
 	// The charging colour has changed twice (blue -> green -> brighter green).
 	// Only move a key that's still sitting on a colour this plugin chose for it;
@@ -294,7 +316,7 @@ export function migrate(settings: BatterySettings): BatterySettings | undefined 
 }
 
 export function refreshSeconds(settings: BatterySettings): number {
-	return Math.max(MIN_REFRESH_SECONDS, settings.refreshSeconds ?? DEFAULTS.refreshSeconds);
+	return Math.max(MIN_REFRESH_SECONDS, resolved(settings).refreshSeconds);
 }
 
 /**
@@ -335,7 +357,7 @@ export function adaptiveSeconds(
 
 	if (reading.status === "charging") return quicker(ADAPTIVE.chargingSeconds);
 
-	const low = settings.lowThreshold ?? DEFAULTS.lowThreshold;
+	const low = resolved(settings).lowThreshold;
 	if (reading.percent !== null && reading.percent <= low) return quicker(ADAPTIVE.lowSeconds);
 
 	// A device that isn't there costs the same scan as one that is, and reports
@@ -353,18 +375,34 @@ export function nextPollSeconds(
 	reading: BatteryReading | undefined,
 	unchanged: number,
 ): number {
-	return (settings.pollMode ?? DEFAULTS.pollMode) === "adaptive"
+	return resolved(settings).pollMode === "adaptive"
 		? adaptiveSeconds(settings, reading, unchanged)
 		: refreshSeconds(settings);
 }
 
+/** What the panel's colour control emits, and the only thing worth trusting. */
+const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+
+/**
+ * A stored colour, or the default when it isn't one.
+ *
+ * These strings are interpolated straight into SVG attributes, so anything but a
+ * plain hex colour is refused rather than escaped: the panel's `sdpi-color`
+ * control can only ever produce one, and a settings file that holds something
+ * else has been hand-edited or corrupted. Falling back to the default keeps a
+ * key readable instead of painting a face out of a broken value.
+ */
+export function safeColor(value: string | undefined, fallback: string): string {
+	return value !== undefined && HEX_COLOR.test(value.trim()) ? value.trim() : fallback;
+}
+
 export function faceColors(settings: BatterySettings): FaceColors {
 	return {
-		low: settings.colorLow ?? DEFAULTS.colorLow,
-		medium: settings.colorMedium ?? DEFAULTS.colorMedium,
-		high: settings.colorHigh ?? DEFAULTS.colorHigh,
-		charging: settings.colorCharging ?? DEFAULTS.colorCharging,
-		background: settings.colorBackground ?? DEFAULTS.colorBackground,
-		foreground: settings.colorForeground ?? DEFAULTS.colorForeground,
+		low: safeColor(settings.colorLow, DEFAULTS.colorLow),
+		medium: safeColor(settings.colorMedium, DEFAULTS.colorMedium),
+		high: safeColor(settings.colorHigh, DEFAULTS.colorHigh),
+		charging: safeColor(settings.colorCharging, DEFAULTS.colorCharging),
+		background: safeColor(settings.colorBackground, DEFAULTS.colorBackground),
+		foreground: safeColor(settings.colorForeground, DEFAULTS.colorForeground),
 	};
 }

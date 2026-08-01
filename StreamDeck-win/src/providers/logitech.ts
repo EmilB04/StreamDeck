@@ -159,11 +159,7 @@ export class LogitechProvider implements BatteryProvider {
 		);
 	}
 
-	private async probe(
-		link: HidppLink,
-		deviceIndex: number,
-		endpoint: HidppEndpoint,
-	): Promise<DiscoveredDevice | null> {
+	private async probe(link: HidppLink, deviceIndex: number, endpoint: HidppEndpoint): Promise<DiscoveredDevice | null> {
 		if (!(await ping(link, deviceIndex))) return null;
 
 		const nameIndex = await featureIndex(link, deviceIndex, FEATURE_DEVICE_NAME);
@@ -179,9 +175,7 @@ export class LogitechProvider implements BatteryProvider {
 
 		const label = name ?? `Logitech device ${hex4(endpoint.productId)}:${deviceIndex}`;
 		const unitId = await readUnitId(link, deviceIndex);
-		const key = unitId
-			? `logitech:${unitId}`
-			: `logitech:${hex4(endpoint.productId)}:${deviceIndex.toString(16)}`;
+		const key = unitId ? `logitech:${unitId}` : `logitech:${hex4(endpoint.productId)}:${deviceIndex.toString(16)}`;
 
 		const reading = feature
 			? await readBattery(link, deviceIndex, feature, label)
@@ -290,6 +284,9 @@ class HidppLink {
 
 		return new Promise((resolve) => {
 			let settled = false;
+			// Declared up here because `finish` below closes over it, and `finish`
+			// has to exist before the listener that can call it is registered.
+			// eslint-disable-next-line prefer-const
 			let timer: NodeJS.Timeout | undefined;
 
 			const finish = (value: number[] | null): void => {

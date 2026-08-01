@@ -1,7 +1,9 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { coalesce } from "./coalesce";
+import { log } from "./log";
 import type { BatteryProvider, BatteryReading, DeviceKind, DiscoveredDevice } from "./types";
-import { slug } from "./types";
+import { clampPercent, slug } from "./types";
 
 const execFileAsync = promisify(execFile);
 const TIMEOUT_MS = 20000;
@@ -42,7 +44,17 @@ const SCRIPT = [
 	"ConvertTo-Json -InputObject @($out) -Compress",
 ].join(" ");
 
-type PnpBattery = { id: string; name: string; level: number | null };
+/**
+ * How long one PowerShell result is reused.
+ *
+ * Deliberately short. A single key press already asks twice — the rescan behind
+ * `discovery.list(force)` and then the direct `read()` for that one device — and
+ * this collapses that pair into one process without letting a later poll be
+ * served anything a user would notice as stale.
+ */
+const QUERY_TTL_MS = 2000;
+
+export type PnpBattery = { id: string; name: string; level: number | null };
 
 /**
  * Detects Bluetooth peripherals that report battery to Windows itself. This is
@@ -66,8 +78,8 @@ export class WindowsBluetoothProvider implements BatteryProvider {
 		return entries.map((entry) => ({
 			key: `winbt:${slug(entry.id)}`,
 			providerId: this.id,
-			label: entry.name?.trim() || "Bluetooth device",
-			kind: kindOf(entry.name ?? ""),
+			label: entry.name.trim() || "Bluetooth device",
+			kind: kindOf(entry.name),
 			supportsBattery: entry.level !== null,
 			locator: { instanceId: entry.id },
 			reading: toReading(entry),
@@ -93,7 +105,13 @@ export class WindowsBluetoothProvider implements BatteryProvider {
 		return toReading(match);
 	}
 
-	private async query(): Promise<PnpBattery[]> {
+	/**
+	 * One PowerShell run serves every key. The script already enumerates all
+	 * paired devices, so asking once per key only multiplied the process count.
+	 */
+	private readonly query = coalesce(() => this.runScript(), QUERY_TTL_MS);
+
+	private async runScript(): Promise<PnpBattery[]> {
 		if (process.platform !== "win32") return [];
 
 		try {
@@ -103,22 +121,32 @@ export class WindowsBluetoothProvider implements BatteryProvider {
 				{ timeout: TIMEOUT_MS, windowsHide: true },
 			);
 
-			const parsed = JSON.parse(stdout.trim() || "[]");
-			const list: PnpBattery[] = Array.isArray(parsed) ? parsed : [parsed];
-			// A missing property comes back as JSON null, and Number(null) is 0 —
-			// which would report a healthy device as flat. Only a real number counts.
+			const parsed: unknown = JSON.parse(stdout.trim() || "[]");
+			const list: unknown[] = Array.isArray(parsed) ? parsed : [parsed];
+			// Everything downstream trusts these three fields, so they're pinned to
+			// their types here rather than checked again at each use. A missing
+			// property comes back as JSON null, and Number(null) is 0 — which would
+			// report a healthy device as flat. Only a real number counts.
 			return list
-				.filter((e) => e && typeof e.id === "string")
-				.map((e) => ({ ...e, level: typeof e.level === "number" && Number.isFinite(e.level) ? e.level : null }));
-		} catch {
-			// PowerShell missing/blocked, or no Bluetooth stack — just contribute nothing.
+				.filter((e): e is Record<string, unknown> => !!e && typeof e === "object")
+				.filter((e) => typeof e.id === "string")
+				.map((e) => ({
+					id: e.id as string,
+					name: typeof e.name === "string" ? e.name : "",
+					level: typeof e.level === "number" && Number.isFinite(e.level) ? e.level : null,
+				}));
+		} catch (err) {
+			// PowerShell missing/blocked, or no Bluetooth stack — just contribute
+			// nothing. Logged because an empty list is otherwise indistinguishable
+			// from a machine that genuinely has no paired devices.
+			log.warn(`windows-bluetooth: could not read paired devices: ${String(err)}`);
 			return [];
 		}
 	}
 }
 
-function toReading(entry: PnpBattery): BatteryReading {
-	const label = entry.name?.trim() || "Bluetooth device";
+export function toReading(entry: PnpBattery): BatteryReading {
+	const label = entry.name.trim() || "Bluetooth device";
 
 	// Only Bluetooth LE devices that implement the GATT battery service get the
 	// property. A Classic device without it may well have a battery Windows can't
@@ -134,7 +162,7 @@ function toReading(entry: PnpBattery): BatteryReading {
 		};
 	}
 
-	const percent = Math.max(0, Math.min(100, Math.round(entry.level)));
+	const percent = clampPercent(entry.level);
 	// Windows exposes the GATT level only; there is no charging flag in this property.
 	return { deviceLabel: label, percent, status: "ok" };
 }
@@ -144,7 +172,7 @@ function toReading(entry: PnpBattery): BatteryReading {
  * does advertise a class-of-device code, but the PnP property that carries it
  * isn't exposed here, and the name is what the user recognises anyway.
  */
-function kindOf(name: string): DeviceKind {
+export function kindOf(name: string): DeviceKind {
 	const value = name.toLowerCase();
 	if (/keyboard|keychron|azoth|kbd/.test(value)) return "keyboard";
 	if (/mouse|mx |trackball/.test(value)) return "mouse";
