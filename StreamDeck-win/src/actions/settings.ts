@@ -221,13 +221,14 @@ export const MIN_REFRESH_SECONDS = 10;
 /**
  * v2: the charging colour moved from blue to green. v3: last-known level.
  * v4: the charging green was brightened. v5: the background went black.
+ * v6: polling adapts by default.
  */
-export const SETTINGS_VERSION = 5;
+export const SETTINGS_VERSION = 6;
 
 export const DEFAULTS = {
 	refreshSeconds: 60,
 	watch: "peripherals" as WatchScope,
-	pollMode: "fixed" as PollMode,
+	pollMode: "adaptive" as PollMode,
 	powerSource: "auto" as PowerSource,
 	showLastKnown: true,
 	style: "bar" as BatteryStyle,
@@ -278,6 +279,14 @@ export function migrate(settings: BatterySettings): BatterySettings | undefined 
 		migrated.colorBackground === undefined || LEGACY_BACKGROUND_COLORS.includes(migrated.colorBackground);
 	if (version < SETTINGS_VERSION && backgroundIsADefault) {
 		migrated.colorBackground = DEFAULTS.colorBackground;
+	}
+
+	// v5 -> v6: adaptive became the default. Keys sitting on "fixed" are there
+	// because that was the shipped default rather than because anyone chose it,
+	// so they follow — the same rule the colours use. Choosing fixed again after
+	// this sticks, since the version has already moved past it.
+	if (version < SETTINGS_VERSION && (migrated.pollMode === undefined || migrated.pollMode === "fixed")) {
+		migrated.pollMode = DEFAULTS.pollMode;
 	}
 
 	// v2 -> v3 added showLastKnown; the defaults merge below turns it on.

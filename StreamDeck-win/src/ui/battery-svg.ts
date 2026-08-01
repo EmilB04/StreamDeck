@@ -145,7 +145,7 @@ function plugGlyph(y: number, color: string): string {
 }
 
 /** Greedy wrap: fills each line with as many whole words as fit. */
-function wrapWords(words: string[], maxChars: number): string[] {
+export function wrapWords(words: string[], maxChars: number): string[] {
 	const lines: string[] = [];
 
 	for (const word of words) {

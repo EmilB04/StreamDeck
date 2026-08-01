@@ -87,6 +87,37 @@ plugin's `node.exe` — Stream Deck respawns it within a couple of seconds.
 `npm run sync-deps` must still be run **on Windows**: it installs node-hid's
 native binary, and the one WSL produces won't load inside Stream Deck.
 
+## Tests
+
+```sh
+npm test          # tsc -p tsconfig.test.json && node --test
+```
+
+No test framework and no extra dependencies: `node:test` plus the TypeScript
+already here. Tests compile to CommonJS in `.test-build/` because the plugin's
+own imports are extensionless — the bundler resolves those, and `require` does
+too, while ESM under Node would not.
+
+48 assertions over the logic that's easy to get quietly wrong: the discharge
+estimator and its refusal to extrapolate from thin evidence, the adaptive poll
+policy, the settings migrations, the provider dedupe, the PlayStation status
+bytes, and the key face — which is asserted against the rendered SVG, since that
+string is the actual product.
+
+Each case is written against a real behaviour rather than the implementation: the
+DualSense tests use `0x08` and `0x28`, the bytes a pad on the bench actually
+sent; the dedupe tests use the "4" that Windows reports for a phone here, which
+is what forced the short-name guard.
+
+Verified by mutation — breaking each of these makes the suite fail:
+
+| Change | Result |
+|---|---|
+| DualSense charge-complete forced back to 100% | 1 failure |
+| short-name guard in the dedupe removed | 1 failure |
+| estimator's ten-minute evidence window dropped | 1 failure |
+| stale readings no longer faded | 1 failure |
+
 ## Publishing to Marketplace
 
 ```sh
@@ -177,7 +208,7 @@ under every control.
 | Icon | which form factor to draw, or work it out | work it out |
 | Power source | work it out automatically, or "always plugged in" to force the plug symbol | automatic |
 | Check battery every | 10–300 seconds | 60 |
-| Timing | always use that interval, or adapt to what the battery is doing | always use it |
+| Timing | adapt to what the battery is doing, or always use that interval | adapt |
 | When pressed | check the battery, or check it and open an app/file/URL | check the battery |
 | If device is off | show its last known level, or a dash | show last known |
 | Meter style | Battery bar / Ring around the key / Percentage only | Battery bar |
@@ -206,7 +237,7 @@ devices. At the 60s default that's fine; at 10s it's a scan running about a
 quarter of the time, forever, for a number that on most devices moves in steps
 of 10%.
 
-**Timing: adapt** trades that fixed cadence for one driven by the reading
+**Timing: adapt** is the default, and trades a fixed cadence for one driven by the reading
 (`adaptiveSeconds` in `src/actions/settings.ts`):
 
 | State | Next check |
@@ -358,7 +389,12 @@ left switched off below the threshold would flash forever. A device that exposes
 no battery at all still shows `N/A`, since there is no earlier level it could
 fall back to.
 
-Two defaults have moved since v1: the charging colour (blue to green in v2, to a
+Polling became adaptive by default in v6; keys sitting on "fixed" were there
+because that was the shipped default rather than because anyone chose it, so
+they follow. Choosing fixed again afterwards sticks, since the version has
+already moved past it.
+
+Two colour defaults have moved since v1: the charging colour (blue to green in v2, to a
 brighter green in v4) and the background (near-black `#1e2024` to `#000000` in
 v5). Existing keys follow, but only where the colour is still one this plugin
 chose (`LEGACY_CHARGING_COLORS`, `LEGACY_BACKGROUND_COLORS`) — one you picked
@@ -692,7 +728,8 @@ src/
   plugin.ts                  entry point, registers actions
   scan.ts                    `npm run scan` — prints discovery results to a terminal
   actions/
-    battery-status.ts        the "Device Battery" action (polling, rendering, PI datasource)
+    key-face.ts              base class: poll chain, pulse, warning latch, titles, painting
+    battery-status.ts        the "Device Battery" action (one chosen device)
     lowest-battery.ts        the "Lowest Battery" action — picks the emptiest device
     device-renaming.ts       the "Device Renaming" action — plugin-wide device names
     renames.ts               the rename map, cached from global settings
@@ -719,6 +756,11 @@ com.emilberglund.batterymonitor.sdPlugin/
   ui/lowest-battery.html     property inspector for the lowest-battery action
   ui/device-renaming.html    property inspector for renaming devices
   ui/inspector.css           styling shared by both inspectors
+test/
+  settings.test.ts           estimator, adaptive polling, migrations, appearance
+  discovery.test.ts          the merge rule that drops duplicate devices
+  dualsense.test.ts          PlayStation status bytes and report offsets
+  battery-svg.test.ts        the rendered key face
   bin/                       build output (gitignored)
 scripts/
   sync-runtime-deps.mjs      installs node-hid into the .sdPlugin folder

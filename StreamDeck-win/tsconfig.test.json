@@ -1,0 +1,15 @@
+{
+	// Tests compile to CommonJS into .test-build, then run under `node --test`.
+	// The plugin itself is bundled as ESM by rollup; CommonJS here is what lets
+	// Node resolve the project's extensionless imports without touching them.
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"module": "CommonJS",
+		"moduleResolution": "Node",
+		"outDir": "./.test-build",
+		"rootDir": ".",
+		"sourceMap": false,
+		"types": ["node"]
+	},
+	"include": ["src/**/*.ts", "test/**/*.ts"]
+}

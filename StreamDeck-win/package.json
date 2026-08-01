@@ -8,7 +8,8 @@
     "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.emilberglund.batterymonitor\"",
     "deploy": "npm run build && node scripts/deploy.mjs",
     "sync-deps": "node scripts/sync-runtime-deps.mjs",
-    "scan": "node com.emilberglund.batterymonitor.sdPlugin/bin/scan.js"
+    "scan": "node com.emilberglund.batterymonitor.sdPlugin/bin/scan.js",
+    "test": "tsc -p tsconfig.test.json && node --test \".test-build/test/*.test.js\""
   },
   "devDependencies": {
     "@elgato/cli": "^0.3.0",

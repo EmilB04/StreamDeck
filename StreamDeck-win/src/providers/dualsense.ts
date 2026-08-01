@@ -220,7 +220,7 @@ function familyOf(productId: number): PadFamily {
 }
 
 /** Which byte holds the status, or null when this report doesn't carry one. */
-function statusIndexOf(bytes: number[], overBluetooth: boolean, family: PadFamily): number | null {
+export function statusIndexOf(bytes: number[], overBluetooth: boolean, family: PadFamily): number | null {
 	if (family === "dualshock4") {
 		if (overBluetooth) return bytes[0] === REPORT_DS4_BT ? STATUS_INDEX_DS4_BT : null;
 		return bytes[0] === REPORT_DS4_USB ? STATUS_INDEX_DS4_USB : null;
@@ -237,7 +237,7 @@ function statusIndexOf(bytes: number[], overBluetooth: boolean, family: PadFamil
  * which is why the two cases divide by different totals. Unverified against
  * hardware; the layout is the one Linux's hid-sony driver uses.
  */
-function decodeDualShock4(status: number, label: string): BatteryReading {
+export function decodeDualShock4(status: number, label: string): BatteryReading {
 	const level = status & DS4_LEVEL;
 	const cable = (status & DS4_CABLE) !== 0;
 
@@ -256,7 +256,7 @@ function decodeDualShock4(status: number, label: string): BatteryReading {
  * Sony reports the level in 11 steps (0-10), which the +5 centres on the middle
  * of each step rather than its floor.
  */
-function decodeStatus(status: number, label: string): BatteryReading {
+export function decodeStatus(status: number, label: string): BatteryReading {
 	const level = status & 0x0f;
 	const state = (status >> 4) & 0x0f;
 	const percent = Math.min(level * 10 + 5, 100);

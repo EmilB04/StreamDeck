@@ -11,3 +11,6 @@ com.emilberglund.batterymonitor.sdPlugin/package-lock.json
 # Personal tool config; contains absolute paths from whoever ran it.
 .claude/settings.local.json
 com.emilberglund.batterymonitor.sdPlugin/.claude/
+
+# Compiled test output.
+.test-build/

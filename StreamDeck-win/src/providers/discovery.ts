@@ -119,7 +119,7 @@ export const discovery = new DeviceDiscovery();
  * doesn't. A false match only costs a duplicate entry that said less than the
  * one it was dropped for.
  */
-function mergeGeneric(devices: DiscoveredDevice[]): DiscoveredDevice[] {
+export function mergeGeneric(devices: DiscoveredDevice[]): DiscoveredDevice[] {
 	const readable = devices.filter((d) => d.supportsBattery).map((d) => normalize(d.label));
 
 	return devices.filter((device) => {
