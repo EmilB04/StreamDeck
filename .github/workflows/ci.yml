@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: StreamDeck-win
+        working-directory: BatteryMonitor
 
     steps:
       - uses: actions/checkout@v4
@@ -19,7 +19,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: StreamDeck-win/package-lock.json
+          cache-dependency-path: BatteryMonitor/package-lock.json
 
       # node-hid is a native addon that only matters on the machine running
       # Stream Deck. It is loaded lazily and its absence just disables the HID
