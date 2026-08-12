@@ -1,0 +1,7 @@
+node_modules/
+logs/
+*.streamDeckPlugin
+.DS_Store
+.test-build/
+.claude/settings.local.json
+**/.claude/
