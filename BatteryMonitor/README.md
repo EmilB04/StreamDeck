@@ -50,7 +50,7 @@ cached for 10s (`src/providers/discovery.ts`).
 | `xbox.ts` | Xbox Wireless Controllers over Bluetooth | Input report `0x04`, one byte of flags — four capacity steps, not a percentage. Dongle/USB is GIP, not HID, so it isn't covered. **Unverified against hardware.** |
 | `dualsense.ts` | PlayStation controllers: DualSense, DualSense Edge, DualShock 4, over USB or Bluetooth | The pad's own input report — see "DualSense battery". Needed because neither OS route sees it: it pairs as Bluetooth Classic, so there's no GATT battery service for Windows to mirror, and over USB it's a plain HID gamepad. |
 | `windows-bluetooth.ts` | Every paired, present Bluetooth device | The `DEVPKEY_Bluetooth_Battery` PnP property (the same number the Settings app shows), read via PowerShell. Vendor-independent, so it covers devices no dedicated provider knows about — but only Bluetooth **LE** devices with a GATT battery service have the property at all. Classic devices are still listed, without a level. |
-| `generic-hid.ts` | Everything else on HID, so nothing is invisible | Nothing — no battery protocol. Cable-connected devices are reported as mains powered; wireless ones (and anything named like a receiver) as unreadable, since they may well have a battery this plugin can't see. |
+| `generic-hid.ts` | Every HID device on the machine, including the vendors above, so nothing is invisible | Nothing — no battery protocol. Cable-connected devices are reported as mains powered; wireless ones (and anything named like a receiver) as unreadable, since they may well have a battery this plugin can't see. |
 
 Device identity is persisted as a stable key, not a HID path: Logitech devices
 use their HID++ unit id, headsets their USB vendor/product ids, Bluetooth
@@ -67,6 +67,39 @@ entry that can't read a battery when another one can. Matching is on the name,
 loosely enough to survive the HID layer's manufacturer prefix ("HP, Inc HyperX
 Cloud Alpha Wireless" vs "HyperX Cloud Alpha Wireless") but falling back to
 equality for names too short to match safely.
+
+The catch-all deliberately lists the four vendors that have a provider of their
+own, and `mergeGeneric` pairs its entries off against them by USB vendor/product
+id rather than by name. The point is what happens when a dedicated provider comes
+up empty — a vendor tool holding the interface open, an unfamiliar usage page, a
+device asleep behind its dongle. Skipping those vendors during enumeration, which
+is what this used to do, turned every one of those cases into the device vanishing
+from the picker, for exactly the hardware most likely to hit them. Now the device
+is still offered, without a level, and the user can see it exists.
+
+### When a device isn't listed
+
+`bin/scan.js` ships inside the installed plugin for this. It prints every HID
+interface the machine exposes, then what each provider made of them:
+
+```pwsh
+node "$env:APPDATA\Elgato\StreamDeck\Plugins\com.emilberglund.batterymonitor.sdPlugin\bin\scan.js"
+```
+
+What the output tells you:
+
+- **`node-hid did not load`** — every HID provider is off. Nothing else in the
+  output means anything until that's fixed.
+- **The device isn't in the HID list at all** — Windows isn't exposing it. A
+  vendor tool with an exclusive handle (G HUB, Armoury Crate, Synapse) or a
+  device that's genuinely off will look like this.
+- **It's in the HID list but not in the device list** — a provider bug worth an
+  [issue](https://github.com/EmilB04/StreamDeck/issues). Include the interface
+  lines: the `usagePage` is usually what decides it.
+
+The plugin's own log has the short version of the same thing — a
+`discovery: headset=0 logitech=2 asus=1 …` line per scan, under
+`%APPDATA%\Elgato\StreamDeck\Plugins\com.emilberglund.batterymonitor.sdPlugin\logs\`.
 
 ## Requirements
 
@@ -179,8 +212,9 @@ with an app icon and gallery images. Review takes 4–10 business days.
 What's already prepared for that:
 
 - **`.sdignore`** keeps development leftovers out of the package — logs, editor
-  state, source maps, `bin/scan.js`, and node-hid's prebuilt binaries for the
-  platforms this doesn't declare. 264 files / 6.2 MB became 217 / 3.9 MB.
+  state, source maps, and node-hid's prebuilt binaries for the platforms this
+  doesn't declare — roughly 4 MB of a 5 MB package. `bin/scan.js` is kept on
+  purpose; see "When a device isn't listed".
 - **Action and category icons are monochrome white on transparent**, which the
   [icon guidelines](https://docs.elgato.com/guidelines/stream-deck/plugins/)
   require for anything shown in Stream Deck's own lists. Colour is kept for the
@@ -795,7 +829,7 @@ src/
     dualsense.ts             PlayStation pads (DualSense, DualShock 4), from their own input report
     razer.ts                 Razer peripherals, via the OpenRazer control protocol
     xbox.ts                  Xbox pads over Bluetooth, from input report 0x04
-    generic-hid.ts           catch-all: lists remaining HID devices, mains vs unreadable
+    generic-hid.ts           catch-all: lists every HID device, mains vs unreadable
     windows-bluetooth.ts     Windows PnP Bluetooth battery property
   ui/battery-svg.ts          renders the key face as an SVG data URI (no canvas/image lib needed)
 com.emilberglund.batterymonitor.sdPlugin/

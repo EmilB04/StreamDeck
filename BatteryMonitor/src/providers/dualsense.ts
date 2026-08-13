@@ -115,6 +115,7 @@ export class DualSenseProvider implements BatteryProvider {
 					serialNumber: info.serialNumber ?? "",
 					family: product.family,
 				},
+				hardware: { vendorId: VENDOR_SONY, productId: info.productId },
 			};
 
 			device.reading = await this.readFrom(info, label, product.family);

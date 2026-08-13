@@ -78,3 +78,60 @@ describe("merging what several providers saw", () => {
 		assert.equal(merged.length, 2);
 	});
 });
+
+/**
+ * The catch-all lists every vendor, including the four with a provider of their
+ * own. Whether that shows up as a duplicate or as the only entry a user gets
+ * depends entirely on this pairing-off.
+ */
+describe("pairing catch-all entries off against the provider that owns the hardware", () => {
+	const withHardware = (
+		base: DiscoveredDevice,
+		vendorId: number,
+		productId: number,
+		label?: string,
+	): DiscoveredDevice => ({ ...base, hardware: { vendorId, productId }, label: label ?? base.label });
+
+	it("drops the catch-all entry for hardware a provider described", () => {
+		// The receiver enumerates as one Logitech HID device; the provider speaks
+		// HID++ through it and reports the mouse paired to it. Both carry the
+		// receiver's ids, and only one of them is worth offering.
+		const merged = mergeGeneric([
+			withHardware(device("logitech", "G502 X PLUS", true, "mouse"), 0x046d, 0xc547),
+			withHardware(device("hid", "Logitech USB Receiver", false), 0x046d, 0xc547),
+		]);
+
+		assert.deepEqual(labels(merged), ["logitech/G502 X PLUS"]);
+	});
+
+	it("keeps the catch-all entry when the provider came up empty", () => {
+		// The regression this whole pairing exists for: G HUB holds the HID++
+		// interface open, the Logitech provider returns nothing, and the mouse used
+		// to disappear from the picker rather than appear without a level.
+		const merged = mergeGeneric([withHardware(device("hid", "Logitech USB Receiver", false), 0x046d, 0xc547)]);
+
+		assert.deepEqual(labels(merged), ["hid/Logitech USB Receiver"]);
+	});
+
+	it("keeps a catch-all entry for different hardware from the same vendor", () => {
+		// Same vendor, different product: an ASUS keyboard the provider found says
+		// nothing about an ASUS mouse it didn't.
+		const merged = mergeGeneric([
+			withHardware(device("asus", "ROG Azoth", true, "keyboard"), 0x0b05, 0x1a00),
+			withHardware(device("hid", "ROG Strix Impact III", false, "mouse"), 0x0b05, 0x1b00),
+		]);
+
+		assert.deepEqual(labels(merged), ["asus/ROG Azoth", "hid/ROG Strix Impact III"]);
+	});
+
+	it("drops the catch-all entry even when the provider couldn't read a level", () => {
+		// A ROG keyboard switched off behind its dongle: the provider knows what it
+		// is and that it isn't answering, which beats the catch-all's guess.
+		const merged = mergeGeneric([
+			withHardware(device("asus", "ROG Azoth", false, "keyboard"), 0x0b05, 0x1a00),
+			withHardware(device("hid", "ASUSTek ROG Azoth", false, "keyboard"), 0x0b05, 0x1a00),
+		]);
+
+		assert.deepEqual(labels(merged), ["asus/ROG Azoth"]);
+	});
+});

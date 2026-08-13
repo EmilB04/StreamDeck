@@ -88,26 +88,37 @@ export class AsusProvider implements BatteryProvider {
 				kind,
 				supportsBattery: false,
 				locator: { productId: info.productId },
+				hardware: { vendorId: VENDOR_ID, productId: info.productId },
 			});
 		}
 
-		// Only surface things that actually present as a peripheral. ASUSTek's
-		// vendor id also covers motherboard gear ("AURA LED Controller" and
-		// friends) that has no battery and no business in a device picker.
-		const candidates = [...byProduct.values()].filter((d) => d.kind !== "other");
+		// Every ASUSTek product is asked for the power frame, including the ones
+		// whose form factor couldn't be worked out. Filtering on the form factor
+		// first was cheaper, but a ROG mouse whose model name isn't in the list
+		// below and whose input interface is held by Armoury Crate looks exactly
+		// like a motherboard LED controller from here — and dropping it before
+		// asking meant it never appeared at all.
+		const all = [...byProduct.values()];
+
+		for (const device of all) {
+			const reading = await this.readPower(Number(device.locator.productId), device.label);
+			if (!reading) continue;
+			device.supportsBattery = true;
+			device.reading = reading;
+		}
+
+		// Something that answers the ROG power command is a peripheral whatever it
+		// called itself. Beyond that, only surface things that present as one:
+		// ASUSTek's vendor id also covers motherboard gear ("AURA LED Controller"
+		// and friends) with no battery and no business in a device picker.
+		const candidates = all.filter((d) => d.supportsBattery || d.kind !== "other");
 
 		for (const device of candidates) {
-			const reading = await this.readPower(Number(device.locator.productId), device.label);
-			if (reading) {
-				device.supportsBattery = true;
-				device.reading = reading;
-			} else {
-				// Silent, not batteryless: a ROG keyboard that's switched off still
-				// leaves its dongle plugged in and answers nothing. "not-found" is
-				// what a device that may come back looks like — and it lets the key
-				// back off its polling instead of probing something that's asleep.
-				device.reading = notFound(device.label, "Detected, but it didn't answer the ROG power command");
-			}
+			// Silent, not batteryless: a ROG keyboard that's switched off still
+			// leaves its dongle plugged in and answers nothing. "not-found" is
+			// what a device that may come back looks like — and it lets the key
+			// back off its polling instead of probing something that's asleep.
+			device.reading ??= notFound(device.label, "Detected, but it didn't answer the ROG power command");
 		}
 
 		return candidates;

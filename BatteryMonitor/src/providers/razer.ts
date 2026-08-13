@@ -89,6 +89,7 @@ export class RazerProvider implements BatteryProvider {
 				kind: kindOf(interfaces, label),
 				supportsBattery: answer !== undefined,
 				locator: { productId, transactionId: answer?.transactionId ?? -1 },
+				hardware: { vendorId: VENDOR_RAZER, productId },
 			};
 
 			device.reading = answer

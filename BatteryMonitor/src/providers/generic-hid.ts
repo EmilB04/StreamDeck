@@ -4,14 +4,6 @@ import type { BatteryProvider, BatteryReading, DeviceKind, DiscoveredDevice } fr
 import { hex4 } from "./types";
 import { isXboxPad } from "./xbox";
 
-/** Vendors a dedicated provider already enumerates, with its own battery protocol. */
-const CLAIMED_VENDORS = new Set([
-	0x046d, // Logitech — logitech.ts
-	0x0b05, // ASUSTek — asus.ts
-	0x054c, // Sony — dualsense.ts
-	0x1532, // Razer — razer.ts
-]);
-
 /** The Stream Deck running this plugin is not a device anyone wants on a key. */
 const ELGATO = 0x0fd9;
 
@@ -31,14 +23,22 @@ const BLUETOOTH_PATH = /\{0000112[45]-0000-1000-8000-00805f9b34fb\}/i;
 const RECEIVER_NAME = /wireless|receiver|dongle|lightspeed|bolt|2\.4\s*g/i;
 
 /**
- * Catch-all: lists every remaining HID device so nothing is invisible, even
- * though none of them report a battery through a protocol this plugin knows.
+ * Catch-all: lists every HID device so nothing is invisible, even though none of
+ * them report a battery through a protocol this plugin knows.
  *
  * Cable-powered devices are reported as running on mains rather than as a
  * failure to read a battery — a wired keyboard has no battery to be missing.
  * Anything wireless, or anything whose name suggests it's a receiver for a
  * wireless peripheral, is left as "unsupported" instead: there may well be a
  * battery there, this plugin just can't see it.
+ *
+ * Vendors that have a dedicated provider are deliberately *not* skipped here.
+ * They used to be, and that turned every way a dedicated provider can come up
+ * empty — a vendor tool holding the interface open, an unfamiliar HID++ usage
+ * page, a device asleep behind its dongle — into the device vanishing from the
+ * picker entirely, for exactly the hardware most likely to hit those cases.
+ * {@link mergeGeneric} drops these entries once a real provider has described
+ * the same vendor/product, which is the narrower thing that was actually meant.
  */
 export class GenericHidProvider implements BatteryProvider {
 	readonly id = "hid";
@@ -53,7 +53,7 @@ export class GenericHidProvider implements BatteryProvider {
 
 		for (const info of devices) {
 			if (!info.path) continue;
-			if (CLAIMED_VENDORS.has(info.vendorId) || info.vendorId === ELGATO) continue;
+			if (info.vendorId === ELGATO) continue;
 			// Only the pad is claimed, not all of Microsoft's mice and keyboards.
 			if (isXboxPad(info)) continue;
 
@@ -70,6 +70,7 @@ export class GenericHidProvider implements BatteryProvider {
 				kind,
 				supportsBattery: false,
 				locator: { vendorId: info.vendorId, productId: info.productId },
+				hardware: { vendorId: info.vendorId, productId: info.productId },
 				reading: readingFor(info, label),
 			});
 		}

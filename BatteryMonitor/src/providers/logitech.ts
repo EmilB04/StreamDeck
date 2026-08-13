@@ -6,13 +6,15 @@ import { hex4 } from "./types";
 const VENDOR_ID = 0x046d;
 
 /**
- * The HID++ endpoint is a vendor-defined usage page (0xff00) exposing two
- * collections: usage 0x01 carries the 7-byte short reports, usage 0x02 the
+ * The HID++ endpoint lives on a vendor-defined usage page — 0xff00 on Unifying
+ * and Lightspeed receivers, another page on some Logitech G devices — exposing
+ * two collections: usage 0x01 carries the 7-byte short reports, usage 0x02 the
  * 20-byte long ones. Windows hands out a separate handle per collection and
  * rejects a report id that the handle's collection doesn't declare, so both
  * have to be opened and each request written to the matching one.
  */
-const HIDPP_USAGE_PAGE = 0xff00;
+const VENDOR_PAGE_FIRST = 0xff00;
+const VENDOR_PAGE_LAST = 0xffff;
 const HIDPP_USAGE_SHORT = 0x01;
 const HIDPP_USAGE_LONG = 0x02;
 
@@ -80,7 +82,7 @@ const DEVICE_TYPES: Record<number, { name: string; kind: DeviceKind }> = {
 type BatteryFeature = { index: number; unified: boolean };
 
 /** The pair of HID collections that together make up one HID++ endpoint. */
-type HidppEndpoint = { key: string; productId: number; short?: HidDeviceInfo; long?: HidDeviceInfo };
+export type HidppEndpoint = { key: string; productId: number; short?: HidDeviceInfo; long?: HidDeviceInfo };
 
 /**
  * Logitech wireless peripherals speak HID++ 2.0 over their receiver or directly
@@ -193,6 +195,8 @@ export class LogitechProvider implements BatteryProvider {
 			kind: type?.kind ?? "other",
 			supportsBattery: feature !== null,
 			locator: { productId: endpoint.productId, deviceIndex },
+			// The receiver's own ids: what the catch-all would list this hardware as.
+			hardware: { vendorId: VENDOR_ID, productId: endpoint.productId },
 			reading,
 		};
 	}
@@ -215,9 +219,19 @@ function endpointKey(path: string): string {
 async function hidppEndpoints(): Promise<HidppEndpoint[]> {
 	const devices = await hidDevices(VENDOR_ID);
 	if (!devices) return [];
+	return selectEndpoints(devices);
+}
 
+/**
+ * Groups Logitech HID interfaces into the endpoints worth probing.
+ *
+ * Exported for the tests: which interfaces survive this decides whether a device
+ * is ever spoken to, and it is the one part of the provider that can be checked
+ * without hardware.
+ */
+export function selectEndpoints(devices: HidDeviceInfo[]): HidppEndpoint[] {
 	const withPath = devices.filter((d) => !!d.path);
-	const vendorCollections = withPath.filter((d) => d.usagePage === HIDPP_USAGE_PAGE);
+	const vendorCollections = withPath.filter((d) => isVendorDefined(d.usagePage));
 	// Some platforms/drivers don't report usagePage; then try every interface.
 	const pool = vendorCollections.length > 0 ? vendorCollections : withPath.filter((d) => d.usagePage === undefined);
 
@@ -231,11 +245,35 @@ async function hidppEndpoints(): Promise<HidppEndpoint[]> {
 		endpoints.set(key, endpoint);
 	}
 
-	// A real HID++ endpoint always offers the long-report collection. Requiring it
-	// discards other 0xff00 vendor interfaces that would otherwise cost a timeout
-	// per probed device index (a Logitech webcam, for instance).
-	const all = [...endpoints.values()];
-	return all.some((e) => e.long) ? all.filter((e) => e.long) : all;
+	// A real HID++ endpoint offers the long-report collection, and requiring it
+	// discards vendor interfaces that would otherwise cost a timeout per probed
+	// device index (a Logitech webcam, for instance). Endpoints that declare no
+	// short/long usage at all are kept regardless: there the platform didn't split
+	// the collections, so a missing `long` says nothing about the protocol.
+	//
+	// Deliberately per-endpoint. This used to keep every endpoint or none, judged
+	// across the whole machine, so one device that did split its collections
+	// disqualified every device that hadn't — a receiver could hide a headset.
+	return [...endpoints.values()].filter((e) => e.long || !usageSplit(e));
+}
+
+/**
+ * Any vendor-defined usage page, not just the 0xff00 that Unifying and Lightspeed
+ * receivers use.
+ *
+ * HID++ is a vendor protocol, and which vendor page it is exposed on is the
+ * vendor's choice — several Logitech G devices answer on a different one. Pinning
+ * 0xff00 meant those were never probed at all, and since the endpoint still has
+ * to answer a HID++ ping before anything is reported, being wrong about a page
+ * costs one timeout rather than a bogus device.
+ */
+function isVendorDefined(usagePage: number | undefined): boolean {
+	return usagePage !== undefined && usagePage >= VENDOR_PAGE_FIRST && usagePage <= VENDOR_PAGE_LAST;
+}
+
+/** Whether this endpoint's collections named themselves as the HID++ short/long pair. */
+function usageSplit(endpoint: HidppEndpoint): boolean {
+	return endpoint.short?.usage === HIDPP_USAGE_SHORT || endpoint.long !== undefined;
 }
 
 /**

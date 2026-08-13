@@ -6,11 +6,46 @@
  *   npm run scan
  */
 import { discovery } from "./providers/discovery";
+import { hidDevices } from "./providers/hid";
 import { setLogger } from "./providers/log";
+import { hex4 } from "./providers/types";
 
 setLogger({ info: (m, ...a) => console.log(m, ...a), warn: (m, ...a) => console.warn(m, ...a) });
 
+/**
+ * Every HID interface on the machine, before any provider has had an opinion.
+ *
+ * This is the part worth pasting into a bug report about a device that isn't
+ * listed: whether it enumerates at all, and on which usage page, is what decides
+ * which provider should have picked it up.
+ */
+async function printHidInterfaces(): Promise<void> {
+	const devices = await hidDevices();
+
+	console.log("HID interfaces");
+	if (!devices) {
+		console.log("  node-hid did not load — every HID provider is disabled.");
+		console.log("  Run `npm run sync-deps` on the machine running Stream Deck.\n");
+		return;
+	}
+	if (devices.length === 0) {
+		console.log("  none reported\n");
+		return;
+	}
+
+	for (const d of devices) {
+		console.log(
+			`  ${hex4(d.vendorId)}:${hex4(d.productId)} ` +
+				`usagePage=0x${(d.usagePage ?? 0).toString(16)} usage=0x${(d.usage ?? 0).toString(16)} ` +
+				`"${(d.product ?? "").trim()}"`,
+		);
+	}
+	console.log("");
+}
+
 async function main(): Promise<void> {
+	await printHidInterfaces();
+
 	const devices = await discovery.list(true);
 
 	if (devices.length === 0) {

@@ -56,8 +56,22 @@ export interface DiscoveredDevice {
 	supportsBattery: boolean;
 	/** Provider-private addressing info. Must be JSON-serializable. */
 	locator: Record<string, string | number>;
+	/**
+	 * The USB ids of the interface this entry came from, when it came from one.
+	 *
+	 * Unlike {@link locator}, this means the same thing across providers, which is
+	 * what lets the catch-all provider list a vendor another provider also handles
+	 * without producing a duplicate: an entry is dropped only when a real provider
+	 * described *that* piece of hardware, not merely something by the same vendor.
+	 */
+	hardware?: HardwareId;
 	/** Reading captured during the scan, when the scan had to fetch it anyway. */
 	reading?: BatteryReading;
+}
+
+export interface HardwareId {
+	vendorId: number;
+	productId: number;
 }
 
 export interface BatteryProvider {

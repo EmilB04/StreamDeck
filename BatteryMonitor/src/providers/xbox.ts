@@ -81,6 +81,7 @@ export class XboxProvider implements BatteryProvider {
 				kind: "gamepad",
 				supportsBattery: reading.percent !== null,
 				locator: { serialNumber: info.serialNumber ?? "", path: info.path ?? "" },
+				hardware: { vendorId: info.vendorId, productId: info.productId },
 				reading,
 			});
 		}

@@ -6,7 +6,7 @@ import { log } from "./log";
 import { LogitechProvider } from "./logitech";
 import { RazerProvider } from "./razer";
 import { XboxProvider } from "./xbox";
-import type { BatteryProvider, DeviceKind, DiscoveredDevice } from "./types";
+import type { BatteryProvider, DeviceKind, DiscoveredDevice, HardwareId } from "./types";
 import { WindowsBluetoothProvider } from "./windows-bluetooth";
 
 /**
@@ -81,10 +81,21 @@ class DeviceDiscovery {
 		const results = await Promise.allSettled(providers.map((p) => p.discover()));
 
 		const found: DiscoveredDevice[] = [];
+		const counts: string[] = [];
 		results.forEach((result, i) => {
-			if (result.status === "fulfilled") found.push(...result.value);
-			else log.warn(`discovery: provider ${providers[i].id} failed`, result.reason);
+			if (result.status === "fulfilled") {
+				found.push(...result.value);
+				counts.push(`${providers[i].id}=${result.value.length}`);
+			} else {
+				counts.push(`${providers[i].id}=failed`);
+				log.warn(`discovery: provider ${providers[i].id} failed`, result.reason);
+			}
 		});
+
+		// Per-provider counts, because the total alone can't tell "the HID
+		// providers found nothing" from "node-hid never loaded" — which is the
+		// first thing worth knowing when someone reports a missing device.
+		log.info(`discovery: ${counts.join(" ")}`);
 
 		const devices = mergeGeneric(found);
 
@@ -122,14 +133,33 @@ export const discovery = new DeviceDiscovery();
 export function mergeGeneric(devices: DiscoveredDevice[]): DiscoveredDevice[] {
 	const readable = devices.filter((d) => d.supportsBattery).map((d) => normalize(d.label));
 
+	// Hardware a dedicated provider described, whether or not it got a level out
+	// of it. The catch-all lists every vendor, including the four with providers
+	// of their own, so that a device its provider missed is still offered — but
+	// one the provider *did* describe would otherwise appear twice.
+	const claimed = new Set(
+		devices.filter((d) => d.providerId !== GENERIC_HID_ID && d.hardware).map((d) => hardwareKey(d.hardware!)),
+	);
+
 	return devices.filter((device) => {
 		if (device.supportsBattery) return true;
+
+		if (device.providerId === GENERIC_HID_ID && device.hardware && claimed.has(hardwareKey(device.hardware))) {
+			return false;
+		}
 
 		// Fallback entries lose to anything; a provider-specific entry only loses
 		// to one that can actually report a level.
 		const name = normalize(device.label);
 		return !readable.some((other) => sameDevice(name, other));
 	});
+}
+
+/** Matches {@link GenericHidProvider.id}; the merge has to know which entries are the fallback. */
+const GENERIC_HID_ID = "hid";
+
+function hardwareKey({ vendorId, productId }: HardwareId): string {
+	return `${vendorId}:${productId}`;
 }
 
 /**

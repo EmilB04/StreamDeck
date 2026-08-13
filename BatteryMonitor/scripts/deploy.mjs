@@ -103,8 +103,17 @@ console.log(`Deploying ${source} -> ${target}`);
 
 // -t matters: without preserved timestamps rsync can't tell an unchanged file
 // from a new one, and every deploy would re-copy the whole plugin.
-execFileSync("rsync", ["-rt", "--info=name", ...EXCLUDES.flatMap((e) => ["--exclude", e]), `${source}/`, `${target}/`], {
-	stdio: "inherit",
-});
+//
+// -c on top of that, because a timestamp is not enough for one file. Stream Deck
+// keeps node-hid's .node binary loaded, so Windows refuses to replace it while
+// the plugin runs — and `npm run sync-deps` restamps it without changing a byte,
+// which is enough for rsync to try, be denied, and fail the whole deploy over a
+// file that was already correct. Comparing contents skips it instead. The tree is
+// a few MB; hashing it costs nothing next to the PowerShell round-trips below.
+execFileSync(
+	"rsync",
+	["-rtc", "--info=name", ...EXCLUDES.flatMap((e) => ["--exclude", e]), `${source}/`, `${target}/`],
+	{ stdio: "inherit" },
+);
 
 restartPlugin();
