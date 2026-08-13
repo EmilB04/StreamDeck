@@ -24,17 +24,11 @@ details.more {
 /* What the key is showing right now, so the panel opens with an answer
    rather than only questions.
 
-   Pinned to the top of the panel's own scroll, so the reading stays readable
-   while dragging a slider further down. Sticky needs an opaque background — a
-   translucent bar would let the settings scroll through it.
-
-   Note this is the only thing the plugin can pin or unpin: Stream Deck draws
-   the action header and the Title field above this document, outside the
-   plugin's reach. */
+   Scrolls away with the rest of the panel. It used to be pinned to the top,
+   which cost a band of a short panel permanently and put a shadow over whatever
+   was being read underneath. The background stays opaque anyway: it separates
+   the strip from the settings below it. */
 .status {
-	position: sticky;
-	top: 0;
-	z-index: 5;
 	display: grid;
 	grid-template-columns: 1fr auto;
 	align-items: center;
@@ -45,7 +39,6 @@ details.more {
 	border-left: 2px solid var(--accent);
 	border-radius: 5px;
 	background: #272727;
-	box-shadow: 0 8px 14px -10px rgba(0, 0, 0, 0.9);
 }
 .status-name {
 	color: var(--bright);
