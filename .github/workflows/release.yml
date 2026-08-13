@@ -26,7 +26,7 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Resolves the tag (or the manual input) to a plugin directory once, so the
       # later steps don't each repeat the mapping. The tag reaches the shell as an
@@ -48,7 +48,9 @@ jobs:
           fi
           echo "dir=$dir" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-node@v4
+      # Matches the manifest's `Nodejs.Version` — the runtime Stream Deck starts
+      # the plugin under, not the Node the actions themselves run on.
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm
@@ -71,7 +73,7 @@ jobs:
         run: gh release create "$TAG" "$DIR"/dist/*.streamDeckPlugin --generate-notes --verify-tag
 
       - if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: streamDeckPlugin
           path: ${{ steps.plugin.outputs.dir }}/dist/*.streamDeckPlugin
