@@ -16,3 +16,6 @@ com.emilberglund.batterymonitor.sdPlugin/.claude/
 
 # Compiled test output.
 .test-build/
+
+# Packaged plugin, written by `npm run pack`.
+dist/

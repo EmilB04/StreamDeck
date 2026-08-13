@@ -64,7 +64,7 @@
 			"Name": "Device Renaming",
 			"UUID": "com.emilberglund.batterymonitor.device-renaming",
 			"Icon": "imgs/actions/device-renaming/icon",
-			"Tooltip": "Rename detected devices for this plugin \u2014 every key follows.",
+			"Tooltip": "Rename detected devices for this plugin — every key follows.",
 			"PropertyInspectorPath": "ui/device-renaming.html",
 			"Controllers": [
 				"Keypad"

@@ -1,10 +1,12 @@
-# Battery Monitor v1.0.0
+# Battery Monitor — release notes
+
+## v1.0.0
 
 First release. A Stream Deck plugin that shows the battery level of your wireless
 peripherals on a key — headsets, mice, keyboards, controllers and paired Bluetooth
 devices — found automatically, with no model list to maintain.
 
-## Actions
+### Actions
 
 - **Device Battery** — one device on one key. Pick it in the property inspector; the
   key polls on an interval and refreshes when pressed.
@@ -15,7 +17,7 @@ devices — found automatically, with no model list to maintain.
   reports one phone here as **4**; a rename fixes it for every key and every device
   picker. Nothing outside the plugin is touched — no OS record, no firmware.
 
-## Device coverage
+### Device coverage
 
 Nothing is hard-coded — the device list is built at runtime from what the machine
 actually reports.
@@ -35,7 +37,7 @@ Devices are remembered by a stable identity — HID++ unit id, USB vendor/produc
 Bluetooth instance id, DualSense MAC — so unplugging and replugging keeps your key
 pointed at the same device.
 
-## Key face
+### Key face
 
 Per-key settings, grouped Device → Updates → On press → Key face → Levels → Colours:
 
@@ -49,7 +51,7 @@ Per-key settings, grouped Device → Updates → On press → Key face → Level
 - Press to refresh, or refresh and open an app, file or URL
 - Optional flash warning when a level crosses under a threshold you set
 
-## Requirements
+### Requirements
 
 - Windows 10 or later, Stream Deck app 6.5+
 - Node.js 20+ on the machine running Stream Deck
@@ -60,10 +62,11 @@ Per-key settings, grouped Device → Updates → On press → Key face → Level
 macOS is not supported. The code would likely mostly work, but none of the HID
 providers have ever been run there, so it isn't claimed.
 
-## Install
+### Install
 
-Install the `.streamDeckPlugin` file below and Stream Deck will do the rest. Then drag
-**Device Battery** onto a key and pick your device.
+Download the `.streamDeckPlugin` file from the
+[releases page](https://github.com/EmilB04/StreamDeck/releases), open it, and Stream
+Deck does the rest. Then drag **Device Battery** onto a key and pick your device.
 
 Building from source:
 
@@ -75,7 +78,7 @@ npm run sync-deps
 npx @elgato/cli link
 ```
 
-## Known limitations
+### Known limitations
 
 - **Razer, Xbox and DualShock 4 support is unverified against hardware.** The
   protocols are implemented from public sources but no device has been tested. They
@@ -90,4 +93,4 @@ npx @elgato/cli link
 Bug reports and device results — especially for the unverified providers — are
 welcome in [Issues](https://github.com/EmilB04/StreamDeck/issues).
 
-MIT with attribution. See [LICENSE](BatteryMonitor/LICENSE).
+MIT with attribution. See [LICENSE](LICENSE).

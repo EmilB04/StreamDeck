@@ -11,6 +11,31 @@ No device models are hard-coded. The dropdown is populated at runtime from what
 the machine actually reports, so plugging in different gear just makes it show
 up.
 
+## What it looks like
+
+![Six keys: a DualSense at 85% and an iPhone at 77% drawn as rings, a HyperX headset at 94%, a G502 at 80% and an ASUS keyboard at 89% drawn as bars](store/gallery/01-thumbnail.png)
+
+Ring or bar, percentage, device icon, and a name line — per key. The `1h` and
+`1m` prefixes are how long since each device was last heard from.
+
+![The same six keys photographed on a physical Stream Deck in a dark room](store/gallery/02-hardware.png)
+
+The same profile on real hardware. Colours are picked for an OLED-ish key at
+arm's length, not for a screenshot.
+
+![Six key faces labelled healthy, low, charging, switched off, mains powered and lowest of all](store/gallery/03-states.png)
+
+Every state a key can be in: healthy, under the low threshold, charging (bolt,
+and it breathes), switched off (dimmed, last known level), mains-powered devices
+that have no battery to report, and the **Lowest Battery** key's frame once what
+it found drops low.
+
+![The property inspector, showing device, updates, on-press and key-face sections with a live status strip at the top](store/gallery/04-inspector.png)
+
+The property inspector. The strip along the top is live — it shows what that key
+is reading while you configure it, so a wrong device is obvious before you close
+the panel.
+
 ## How devices are detected
 
 Each provider enumerates what it can see; the results are merged, sorted and
@@ -54,6 +79,12 @@ equality for names too short to match safely.
   page via `streamDeck.system.openUrl` (the real browser — the inspector is a
   webview with nowhere to put a page).
 
+## Install
+
+Download the `.streamDeckPlugin` file from the
+[latest release](https://github.com/EmilB04/StreamDeck/releases/latest) and open
+it — Stream Deck installs it and needs nothing else from you.
+
 ## Build & install
 
 ```sh
@@ -62,6 +93,11 @@ npm run build           # rollup -> com.emilberglund.batterymonitor.sdPlugin/bin
 npm run sync-deps       # installs node-hid into the .sdPlugin folder
 npx @elgato/cli link    # symlinks com.emilberglund.batterymonitor.sdPlugin into Stream Deck's plugin folder
 ```
+
+`npm run pack` does the build and the dep sync, then writes the installable
+`dist/com.emilberglund.batterymonitor.streamDeckPlugin` — the same file the
+releases carry, for handing a build to someone without a toolchain. It also
+rewrites `manifest.json` in place (the CLI normalizes it), which is expected.
 
 Then in the Stream Deck app, drag the "Device Battery" action onto a key, and
 pick the device + interval in the property inspector. The refresh button beside
@@ -85,8 +121,11 @@ It resolves the target by following the link Stream Deck actually loads (set
 plugin's `node.exe` — Stream Deck respawns it within a couple of seconds.
 `npm run watch` is Windows-only for the same CLI reason.
 
-`npm run sync-deps` must still be run **on Windows**: it installs node-hid's
-native binary, and the one WSL produces won't load inside Stream Deck.
+`npm run sync-deps` works from either side: node-hid's npm tarball carries a
+prebuilt binary for every platform, Windows included, and the install step only
+_verifies_ the host's. Check that
+`com.emilberglund.batterymonitor.sdPlugin/node_modules/node-hid/prebuilds/HID-win32-x64/`
+survived if a package ever fails to load on Windows — that's the one that ships.
 
 ## Tests
 
@@ -123,7 +162,7 @@ Verified by mutation — breaking each of these makes the suite fail:
 
 ```sh
 npx streamdeck validate com.emilberglund.batterymonitor.sdPlugin
-npx streamdeck pack com.emilberglund.batterymonitor.sdPlugin
+npm run pack
 ```
 
 `pack` validates first and writes a `.streamDeckPlugin`, which is uploaded in

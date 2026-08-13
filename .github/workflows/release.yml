@@ -1,0 +1,77 @@
+name: Release
+
+# Packages a plugin and attaches the .streamDeckPlugin file to a GitHub release,
+# so people can install it by double-clicking one download.
+#
+# Tag format is `<plugin>-v<version>`, e.g. `battery-monitor-v1.1.0`. The prefix
+# picks the directory to build, which is what keeps this workflow usable once the
+# repo holds more than one plugin. workflow_dispatch packs without releasing and
+# leaves the file as a build artifact, for testing the packaging itself.
+on:
+  push:
+    tags:
+      - "battery-monitor-v*"
+  workflow_dispatch:
+    inputs:
+      plugin:
+        description: Plugin directory to package
+        type: choice
+        options: [BatteryMonitor]
+        default: BatteryMonitor
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Resolves the tag (or the manual input) to a plugin directory once, so the
+      # later steps don't each repeat the mapping. The tag reaches the shell as an
+      # environment variable rather than an interpolated expression, so a tag name
+      # can never be read as shell.
+      - id: plugin
+        env:
+          EVENT: ${{ github.event_name }}
+          TAG: ${{ github.ref_name }}
+          INPUT: ${{ inputs.plugin }}
+        run: |
+          if [ "$EVENT" = workflow_dispatch ]; then
+            dir=$INPUT
+          else
+            case "$TAG" in
+              battery-monitor-v*) dir=BatteryMonitor ;;
+              *) echo "::error::no plugin mapped to tag $TAG"; exit 1 ;;
+            esac
+          fi
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: ${{ steps.plugin.outputs.dir }}/package-lock.json
+
+      # node-hid's install script only verifies the prebuilt binary for the host
+      # platform; the npm tarball carries every platform's, including the Windows
+      # one that actually ships. So an ubuntu runner can build the Windows package.
+      - run: npm ci --ignore-scripts
+        working-directory: ${{ steps.plugin.outputs.dir }}
+
+      - run: npm run pack
+        working-directory: ${{ steps.plugin.outputs.dir }}
+
+      - if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          DIR: ${{ steps.plugin.outputs.dir }}
+        run: gh release create "$TAG" "$DIR"/dist/*.streamDeckPlugin --generate-notes --verify-tag
+
+      - if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: streamDeckPlugin
+          path: ${{ steps.plugin.outputs.dir }}/dist/*.streamDeckPlugin
