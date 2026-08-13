@@ -116,6 +116,8 @@ export class DualSenseProvider implements BatteryProvider {
 					family: product.family,
 				},
 				hardware: { vendorId: VENDOR_SONY, productId: info.productId },
+				// The PS5 pads were verified on hardware; the DualShock 4 path was not.
+				unverified: product.family === "dualshock4",
 			};
 
 			device.reading = await this.readFrom(info, label, product.family);

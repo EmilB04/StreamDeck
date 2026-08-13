@@ -117,7 +117,10 @@ export class WindowsBluetoothProvider implements BatteryProvider {
 		try {
 			const { stdout } = await execFileAsync(
 				"powershell.exe",
-				["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", SCRIPT],
+				// No -ExecutionPolicy: it governs script *files*, and this is an inline
+				// -Command. Passing Bypass changed nothing except making every poll look
+				// like the pattern EDR and antivirus tools are built to flag.
+				["-NoProfile", "-NonInteractive", "-Command", SCRIPT],
 				{ timeout: TIMEOUT_MS, windowsHide: true },
 			);
 

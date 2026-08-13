@@ -1,6 +1,6 @@
 {
   "name": "com.emilberglund.batterymonitor",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Multi-purpose Stream Deck plugin. Starts with battery monitoring for auto-detected wireless peripherals.",
   "scripts": {

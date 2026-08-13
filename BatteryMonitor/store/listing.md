@@ -83,7 +83,12 @@ Bluetooth's.
 The plugin makes no network requests and collects nothing. It reads battery
 levels from devices on your own machine, and everything it remembers — your
 device choice, names you set, recent levels — stays in Stream Deck's own
-settings on your computer.
+settings on your computer. Nothing it ships loads from the internet either: the
+one third-party library the settings panels use is bundled inside the plugin
+rather than fetched when a panel opens.
+
+The only button that reaches the internet is the one offering to download
+HeadsetControl, which opens its releases page in your browser.
 
 ---
 

@@ -101,6 +101,21 @@ The plugin's own log has the short version of the same thing — a
 `discovery: headset=0 logitech=2 asus=1 …` line per scan, under
 `%APPDATA%\Elgato\StreamDeck\Plugins\com.emilberglund.batterymonitor.sdPlugin\logs\`.
 
+## Third-party code
+
+`com.emilberglund.batterymonitor.sdPlugin/ui/sdpi-components.js` is
+[sdpi-components](https://sdpi-components.dev) v3.0.2, vendored rather than
+loaded from its CDN. Elgato's samples use the CDN `<script src>`, and that was
+what this shipped with — but a property inspector holds the Stream Deck
+websocket and can write action settings, one of which names an executable to
+launch. A compromise of that host, or anyone able to intercept the request,
+would have been arbitrary code execution on every machine running the plugin,
+with no plugin update involved. Bundling it also makes the panels work offline
+and makes the store listing's "no network requests" claim true.
+
+To update it: re-download from the same URL, check the version banner at the top
+of the file, and open each of the three panels — the components are the panels.
+
 ## Requirements
 
 - Stream Deck app on Windows 10 or later. macOS is not supported: none of
@@ -246,9 +261,10 @@ What's already prepared for that:
 
 Still open before submitting:
 
-- **Razer, Xbox and DualShock 4 are unverified** against hardware. They're
-  marked in the property inspector, but public users will hit that code.
-- Gallery images still have to be produced — they can't come from the repo.
+- **Razer, Xbox and DualShock 4 are unverified** against hardware, and public
+  users will hit that code. Their picker entries are labelled
+  "(untested — please report)", which is set from `DiscoveredDevice.unverified`
+  in each provider — remove the flag as hardware confirms each one.
 - Optional: **DRM** needs `SDKVersion: 3` and `Software.MinimumVersion: 6.9`,
   which encrypts the package at the cost of a runtime-readable manifest.
 

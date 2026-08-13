@@ -81,8 +81,8 @@ npx @elgato/cli link
 ### Known limitations
 
 - **Razer, Xbox and DualShock 4 support is unverified against hardware.** The
-  protocols are implemented from public sources but no device has been tested. They
-  are marked as such in the property inspector.
+  protocols are implemented from public sources but no device has been tested.
+  Their entries in the device picker say so.
 - Xbox controllers report four capacity steps, not a percentage — the number shown is
   a stand-in for the step.
 - Xbox over the USB dongle uses GIP rather than HID, so it isn't covered — Bluetooth

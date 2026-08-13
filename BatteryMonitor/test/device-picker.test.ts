@@ -60,3 +60,28 @@ describe("grouping the device picker", () => {
 		assert.deepEqual(groupedDevices([]), []);
 	});
 });
+
+describe("labelling devices whose protocol has never met the hardware", () => {
+	const untested = (label: string): DiscoveredDevice => ({ ...device(label, true), unverified: true });
+
+	it("says so in the picker, so a wrong level becomes a bug report", () => {
+		const [battery] = groupedDevices([untested("Razer Basilisk V3 Pro")]) as UiGroup[];
+		assert.deepEqual(
+			battery.children.map((c) => c.label),
+			["Razer Basilisk V3 Pro (untested — please report)"],
+		);
+	});
+
+	it("leaves verified devices alone", () => {
+		const [battery] = groupedDevices([device("G502 X PLUS", true)]) as UiGroup[];
+		assert.deepEqual(
+			battery.children.map((c) => c.label),
+			["G502 X PLUS"],
+		);
+	});
+
+	it("keeps the key untouched, so the marking can't change what a key points at", () => {
+		const [battery] = groupedDevices([untested("Xbox Wireless Controller")]) as UiGroup[];
+		assert.equal(battery.children[0].value, "k:Xbox Wireless Controller");
+	});
+});

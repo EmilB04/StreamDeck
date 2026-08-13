@@ -46,8 +46,21 @@ const TIER_HEADINGS = ["Battery", "Mains powered", "No battery data"] as const;
 export function groupedDevices(devices: DiscoveredDevice[]): UiListEntry[] {
 	return TIER_HEADINGS.map((label, tier) => ({
 		label,
-		children: devices.filter((d) => powerTier(d) === tier).map((d) => ({ label: d.label, value: d.key })),
+		children: devices.filter((d) => powerTier(d) === tier).map((d) => ({ label: pickerLabel(d), value: d.key })),
 	})).filter((group) => group.children.length > 0);
+}
+
+/**
+ * How a device reads in the picker.
+ *
+ * The group heading already says what it can report, so the only thing left to
+ * add is where the protocol behind it has never met the hardware. Silence there
+ * would be the worse choice: a wrong or missing level from an untested decoder
+ * is indistinguishable from a broken plugin, and the person seeing it is the
+ * only one who can confirm it either way.
+ */
+function pickerLabel(device: DiscoveredDevice): string {
+	return device.unverified ? `${device.label} (untested — please report)` : device.label;
 }
 
 /** One line for the property inspector's status strip, in the user's terms. */

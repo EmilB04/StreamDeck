@@ -82,6 +82,7 @@ export class XboxProvider implements BatteryProvider {
 				supportsBattery: reading.percent !== null,
 				locator: { serialNumber: info.serialNumber ?? "", path: info.path ?? "" },
 				hardware: { vendorId: info.vendorId, productId: info.productId },
+				unverified: true,
 				reading,
 			});
 		}

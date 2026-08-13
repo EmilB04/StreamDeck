@@ -65,6 +65,15 @@ export interface DiscoveredDevice {
 	 * described *that* piece of hardware, not merely something by the same vendor.
 	 */
 	hardware?: HardwareId;
+	/**
+	 * True where the protocol behind this entry has never been run against the
+	 * hardware it decodes — written from published documentation instead.
+	 *
+	 * It reaches the device picker, because the alternative is a device that
+	 * silently reads wrong or reads nothing and looks like a plugin that doesn't
+	 * work. Saying so turns that into a bug report.
+	 */
+	unverified?: boolean;
 	/** Reading captured during the scan, when the scan had to fetch it anyway. */
 	reading?: BatteryReading;
 }
