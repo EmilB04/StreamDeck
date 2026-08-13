@@ -1,7 +1,6 @@
 import streamDeck, { action } from "@elgato/streamdeck";
 import type { KeyAction, KeyDownEvent, SendToPluginEvent } from "@elgato/streamdeck";
 import { discovery } from "../providers/discovery";
-import { findHeadsetControl, HEADSETCONTROL_RELEASES } from "../providers/headsetcontrol";
 import { powerTier } from "../providers/types";
 import type { BatteryReading, DeviceKind, DiscoveredDevice } from "../providers/types";
 import { noticeKeyImage } from "../ui/battery-svg";
@@ -228,19 +227,9 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 			await this.sendStatus(ev.action.id);
 			return;
 		}
-		if (ev.payload?.event === "getHeadsetTool") {
-			const binary = await findHeadsetControl();
-			await replyToPanel({ event: "getHeadsetTool", installed: binary !== null, binary });
-			return;
-		}
-		if (ev.payload?.event === "openHeadsetTool") {
-			// Stream Deck opens it in the real browser; the inspector is a webview
-			// with no place to put a page.
-			await streamDeck.system.openUrl(HEADSETCONTROL_RELEASES);
-			return;
-		}
-		// getApps and shareAppearance are answered identically by both battery
-		// actions, so they're handled once in the base class.
+		// getApps, shareAppearance and the HeadsetControl pair are answered
+		// identically by both battery actions, so they're handled once in the base
+		// class.
 		if (ev.payload?.event !== "getDevices") {
 			await super.onSendToPlugin(ev);
 			return;

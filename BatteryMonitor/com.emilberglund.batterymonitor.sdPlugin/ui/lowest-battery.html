@@ -13,6 +13,25 @@
 		<div class="status-state" id="status-state">Waiting for a reading</div>
 	</div>
 
+	<!--
+		Shown only while HeadsetControl is missing. It matters more here than on a
+		Device Battery key: without the tool no headset reports a level, so "lowest"
+		is decided with every headset left out — and the key looks right while doing
+		it. Removes itself once the tool is found.
+	-->
+	<div class="notice" id="tool-notice" hidden>
+		<div class="notice-title">HeadsetControl is required for headsets</div>
+		<div class="notice-body">
+			Without it <b>no headset can report a battery level</b>, so this key picks
+			the lowest of everything except your headsets.
+			<br /><br />
+			When you run the installer, <b>remember to add it to PATH</b> — that's what
+			lets the plugin find it. If a headset still shows no level afterwards,
+			restart Stream Deck: it doesn't see a new PATH entry until it's restarted.
+		</div>
+		<sdpi-button class="get-headsetcontrol">Download HeadsetControl</sdpi-button>
+	</div>
+
 	<div class="section">Watching</div>
 
 	<sdpi-item label="Devices">
@@ -150,6 +169,35 @@
 
 	<span class="hint">Copies the colours, thresholds and what's drawn to every other Battery Monitor key.</span>
 
+	<!--
+		Where HeadsetControl lives once it's installed and the banner at the top has
+		gone. Matches the same section on the Device Battery panel: the answer to
+		"did it find the tool, and which copy" has to stay somewhere findable, or
+		installing it looks like it did nothing.
+	-->
+	<div class="section">Headset support</div>
+
+	<span class="hint" id="tool-checking">Checking whether HeadsetControl is installed…</span>
+
+	<div id="tool-missing" hidden>
+		<span class="hint">
+			Not installed. Headsets can't report a level without it, so this key can't
+			pick one as the lowest. The download is in the warning at the top of this
+			panel.
+		</span>
+	</div>
+
+	<div id="tool-installed" hidden>
+		<span class="hint" id="tool-path">Installed — headsets report their level.</span>
+		<details class="more">
+		<summary>Want to re-install?</summary>
+		<div>
+			<p>Worth doing if a headset stopped reporting after an update, or if yours is newer than your copy of the tool.</p>
+			<sdpi-button class="get-headsetcontrol">Open the releases page</sdpi-button>
+		</div>
+		</details>
+	</div>
+
 	<script>
 		const client = SDPIComponents.streamDeckClient;
 
@@ -189,7 +237,28 @@
 		const statusLevel = document.getElementById("status-level");
 		const statusState = document.getElementById("status-state");
 
+		// Where the tool is reported depends on whether it's there: a banner at the
+		// top while it's missing, a line in the section at the bottom once it isn't.
+		// Both start hidden, so someone who already has it never sees the warning
+		// flash up while the check runs.
+		const toolNotice = document.getElementById("tool-notice");
+		const toolChecking = document.getElementById("tool-checking");
+		const toolMissing = document.getElementById("tool-missing");
+		const toolInstalled = document.getElementById("tool-installed");
+		const toolPath = document.getElementById("tool-path");
+
 		client.sendToPropertyInspector?.subscribe?.((message) => {
+			if (message?.payload?.event === "getHeadsetTool") {
+				const { installed, binary } = message.payload;
+				toolNotice.hidden = installed;
+				toolChecking.hidden = true;
+				toolMissing.hidden = installed;
+				toolInstalled.hidden = !installed;
+				if (installed) {
+					toolPath.textContent = `Installed — headsets report their level. Using ${binary}.`;
+				}
+				return;
+			}
 			if (message?.payload?.event !== "getStatus") return;
 
 			const value = message.payload.status;
@@ -208,6 +277,12 @@
 		});
 
 		document.getElementById("share-appearance").addEventListener("click", () => send({ event: "shareAppearance" }));
+
+		for (const button of document.querySelectorAll(".get-headsetcontrol")) {
+			button.addEventListener("click", () => send({ event: "openHeadsetTool" }));
+		}
+
+		send({ event: "getHeadsetTool" });
 
 		const askForStatus = () => send({ event: "getStatus" });
 		askForStatus();

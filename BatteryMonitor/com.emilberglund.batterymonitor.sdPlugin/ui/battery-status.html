@@ -13,6 +13,25 @@
 		<div class="status-state" id="status-state">Waiting for a reading</div>
 	</div>
 
+	<!--
+		Shown only while HeadsetControl is missing, and at the top rather than down
+		in "Headset support": someone whose headset shows no level has no reason to
+		scroll to a section about a tool they've never heard of. It removes itself
+		once the tool is found, so it can't turn into a permanent banner.
+	-->
+	<div class="notice" id="tool-notice" hidden>
+		<div class="notice-title">HeadsetControl is required for headsets</div>
+		<div class="notice-body">
+			Without it <b>no headset can report a battery level</b> — they're listed
+			under "No battery data". Every other kind of device works without it.
+			<br /><br />
+			When you run the installer, <b>remember to add it to PATH</b> — that's what
+			lets the plugin find it. If a headset still shows no level afterwards,
+			restart Stream Deck: it doesn't see a new PATH entry until it's restarted.
+		</div>
+		<sdpi-button class="get-headsetcontrol">Download HeadsetControl</sdpi-button>
+	</div>
+
 	<div class="section">Device</div>
 
 	<!--
@@ -208,14 +227,16 @@
 
 	<span class="hint" id="tool-checking">Checking whether HeadsetControl is installed…</span>
 
-	<!-- Missing: the download is the point of the section, so it leads. -->
+	<!--
+		Missing: the banner at the top of the panel already carries the download, so
+		this only states the fact. Two identical download buttons in one panel read
+		as two different things to do.
+	-->
 	<div id="tool-missing" hidden>
-		<sdpi-item label="HeadsetControl">
-			<sdpi-button class="get-headsetcontrol">Download HeadsetControl</sdpi-button>
-		</sdpi-item>
 		<span class="hint">
 			Not installed. Headsets can't report a level without it; every other kind
-			of device is unaffected.
+			of device is unaffected. The download is in the warning at the top of this
+			panel.
 		</span>
 	</div>
 
@@ -345,6 +366,7 @@
 		const toolMissing = document.getElementById("tool-missing");
 		const toolInstalled = document.getElementById("tool-installed");
 		const toolPath = document.getElementById("tool-path");
+		const toolNotice = document.getElementById("tool-notice");
 
 		client.sendToPropertyInspector?.subscribe?.((message) => {
 			if (message?.payload?.event !== "getHeadsetTool") return;
@@ -353,6 +375,10 @@
 			toolChecking.hidden = true;
 			toolMissing.hidden = installed;
 			toolInstalled.hidden = !installed;
+			// The banner starts hidden rather than shown-then-hidden: the check takes
+			// a moment, and a warning that flashes up on every panel open for someone
+			// who already has the tool is worse than one that arrives a beat late.
+			toolNotice.hidden = installed;
 
 			if (installed) {
 				toolPath.textContent = `Installed — headsets report their level. Using ${binary}.`;

@@ -62,6 +62,12 @@ export const HEADSETCONTROL_RELEASES = "https://github.com/Sapd/HeadsetControl/r
  * device unless the panel says so.
  */
 export async function findHeadsetControl(): Promise<string | null> {
+	// Every candidate's outcome, logged as one line when none of them worked.
+	// "Not installed" is the plugin's most consequential claim about a machine —
+	// it drives a warning banner — and a bare "not found" gives whoever has to
+	// disagree with it nothing to go on.
+	const attempts: string[] = [];
+
 	for (const binary of candidateBinaries()) {
 		try {
 			await execFileAsync(binary, ["--help"], { timeout: TIMEOUT_MS, windowsHide: true });
@@ -69,8 +75,11 @@ export async function findHeadsetControl(): Promise<string | null> {
 		} catch (err: any) {
 			// Anything other than "no such file" means it's there and answered.
 			if (err?.code !== "ENOENT") return binary;
+			attempts.push(`${binary}: ENOENT`);
 		}
 	}
+
+	log.info(`headsetcontrol: not found — tried ${attempts.join(", ")}`);
 	return null;
 }
 

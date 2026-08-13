@@ -7,6 +7,7 @@ import type {
 	WillAppearEvent,
 	WillDisappearEvent,
 } from "@elgato/streamdeck";
+import { findHeadsetControl, HEADSETCONTROL_RELEASES } from "../providers/headsetcontrol";
 import type { BatteryReading, DeviceKind } from "../providers/types";
 import { batteryKeyImage } from "../ui/battery-svg";
 import { applyAppearance, shareAppearance, sharedAppearance } from "./appearance";
@@ -148,6 +149,28 @@ export abstract class KeyFaceAction<TSettings extends BatterySettings> extends S
 	override async onSendToPlugin(ev: SendToPluginEvent<UiMessage, TSettings>): Promise<void> {
 		if (ev.payload?.event === "getApps") {
 			await this.sendApps(ev.payload?.isRefresh === true);
+			return;
+		}
+
+		// Both battery actions warn about a missing HeadsetControl, so both have to
+		// be able to answer the question. Lowest Battery needs it at least as much
+		// as Device Battery does: without the tool, headsets report nothing, and a
+		// key that shows "whichever is emptiest" would quietly be answering that
+		// question with every headset left out of the running.
+		if (ev.payload?.event === "getHeadsetTool") {
+			const binary = await findHeadsetControl();
+			// Logged because the panel's answer and the headset provider's answer can
+			// disagree, and when they do there is nothing on screen to say which
+			// candidate path was tried or what it did.
+			streamDeck.logger.info(`headset tool: ${binary ? `found at ${binary}` : "not found"}`);
+			await replyToPanel({ event: "getHeadsetTool", installed: binary !== null, binary });
+			return;
+		}
+
+		if (ev.payload?.event === "openHeadsetTool") {
+			// Stream Deck opens it in the real browser; the inspector is a webview
+			// with no place to put a page.
+			await streamDeck.system.openUrl(HEADSETCONTROL_RELEASES);
 			return;
 		}
 

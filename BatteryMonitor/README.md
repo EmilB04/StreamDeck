@@ -107,10 +107,25 @@ The plugin's own log has the short version of the same thing — a
   the HID providers have ever been run there, so it isn't claimed.
 - Node.js 20+ on the machine running Stream Deck
 - [HeadsetControl](https://github.com/Sapd/HeadsetControl/releases) on `PATH`
-  (for headsets) — or set `HEADSETCONTROL_PATH` to its full path. The property
-  inspector says whether it found it, and has a button that opens the releases
-  page via `streamDeck.system.openUrl` (the real browser — the inspector is a
-  webview with nowhere to put a page).
+  (for headsets) — the Windows release ships an installer with an "add to PATH"
+  option, which is what the panels tell users to tick. There is no package
+  manager to point them at instead: the CLI isn't in winget, Scoop or Chocolatey,
+  only GUI wrappers around it are.
+
+  `candidateBinaries()` also probes `%LOCALAPPDATA%\Programs\HeadsetControl\` and
+  `%ProgramFiles%\HeadsetControl\` — the installer's own defaults — so a user who
+  skips the PATH option is still found. `HEADSETCONTROL_PATH` overrides
+  everything.
+
+  Both battery panels warn about it in a banner at the top while it's missing;
+  once the tool is found the banner goes and the "Headset support" section at the
+  bottom names the copy in use, so installing it visibly did something. The
+  button opens the releases page via
+  `streamDeck.system.openUrl` (the real browser — the inspector is a webview with
+  nowhere to put a page). The warning is unconditional rather than shown only to
+  people who own a headset: nothing here can tell a headset that reports no level
+  from one the plugin can't see at all, which is exactly the case the warning is
+  for.
 
 ## Install
 

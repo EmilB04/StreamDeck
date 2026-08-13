@@ -9,6 +9,16 @@
 	--row-width: 336px;
 }
 
+/* The `hidden` attribute is only enforced by the browser's own stylesheet, and
+   any author `display:` rule beats that no matter how unspecific it is. Several
+   blocks in these panels are both styled by class and toggled with
+   `element.hidden` — the HeadsetControl banner and the "checking…" line among
+   them — so without this they were pinned on screen permanently, and the banner
+   claimed the tool was missing on machines that had it. */
+[hidden] {
+	display: none !important;
+}
+
 body {
 	margin: 0;
 	padding: 10px 0 16px 0;
@@ -71,6 +81,43 @@ details.more {
 .status[data-state="offline"],
 .status[data-state="idle"] {
 	border-left-color: rgba(255, 255, 255, 0.25);
+}
+
+/* Something the user has to act on before part of the plugin works, sitting at
+   the top of the panel rather than in the section it belongs to — the point is
+   to be read by someone who wasn't looking for it.
+
+   Amber, not red: nothing is broken and no setting is lost. It stays until the
+   thing it asks for is done, and disappears completely once it is, so it can't
+   become furniture the user learns to scroll past. */
+.notice {
+	--notice: #ffb84d;
+	display: block;
+	margin: 0 0 14px 0;
+	padding: 10px 11px;
+	border: 1px solid rgba(255, 184, 77, 0.35);
+	border-left: 2px solid var(--notice);
+	border-radius: 5px;
+	background: rgba(255, 184, 77, 0.08);
+}
+.notice-title {
+	margin-bottom: 3px;
+	color: var(--notice);
+	font-size: 11px;
+	font-weight: 600;
+}
+.notice-body {
+	color: var(--bright);
+	font-size: 11px;
+	line-height: 1.45;
+}
+.notice-body b {
+	color: var(--bright);
+	font-weight: 600;
+}
+.notice sdpi-button {
+	display: block;
+	margin-top: 9px;
 }
 
 /* Section rule: full width, so groups read as groups. */
