@@ -352,7 +352,11 @@ Bluetooth speaker reporting no level looks exactly like a headset whose battery
 Windows can't read, so those stay on "no battery data" until you set the key's
 **Power source** to "always plugged in", which forces the plug.
 
-The picker says which is which: `(mains powered)` versus `(no battery data)`.
+The picker says which is which by grouping: it lists devices under **Battery**,
+**Mains powered** and **No battery data** headings, in that order. The headings
+are `<optgroup>`s — the user can see them but not select them — built from the
+same `powerTier` the list is sorted by, so a device can't be filed under one
+heading and ordered as if it were another.
 
 ### Pressing the key
 

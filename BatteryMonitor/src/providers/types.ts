@@ -91,6 +91,25 @@ export interface BatteryProvider {
 }
 
 /**
+ * How much a device can say about its power, most useful first:
+ *
+ *   0 has a battery this plugin can read
+ *   1 runs off the cable — a real answer, just never a percentage
+ *   2 nothing to say: no battery protocol here, or nothing answering
+ *
+ * This orders the device picker and names its entries, from one definition so
+ * the two can't disagree — a device sorted into the battery group but labelled
+ * "no battery data" would read as a bug in both places at once.
+ */
+export type PowerTier = 0 | 1 | 2;
+
+export function powerTier(device: DiscoveredDevice): PowerTier {
+	if (device.supportsBattery) return 0;
+	if (device.reading?.status === "mains") return 1;
+	return 2;
+}
+
+/**
  * A whole-number percentage inside 0-100.
  *
  * Every provider scales a raw value into a percentage, and each was clamping it

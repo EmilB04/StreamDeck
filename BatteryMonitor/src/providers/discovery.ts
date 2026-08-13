@@ -6,6 +6,7 @@ import { log } from "./log";
 import { LogitechProvider } from "./logitech";
 import { RazerProvider } from "./razer";
 import { XboxProvider } from "./xbox";
+import { powerTier } from "./types";
 import type { BatteryProvider, DeviceKind, DiscoveredDevice, HardwareId } from "./types";
 import { WindowsBluetoothProvider } from "./windows-bluetooth";
 
@@ -99,13 +100,13 @@ class DeviceDiscovery {
 
 		const devices = mergeGeneric(found);
 
-		// Devices that can actually report a level come first: the picker defaults
-		// to the top entry, and the catch-all list is long.
+		// Grouped by how much each device can say about its power — readable
+		// batteries, then mains-powered, then the ones with nothing to report.
+		// The picker defaults to the top entry and the catch-all list is long, so
+		// the useful half has to be the half you land on.
 		devices.sort(
 			(a, b) =>
-				Number(b.supportsBattery) - Number(a.supportsBattery) ||
-				KIND_ORDER[a.kind] - KIND_ORDER[b.kind] ||
-				a.label.localeCompare(b.label),
+				powerTier(a) - powerTier(b) || KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.label.localeCompare(b.label),
 		);
 
 		log.info(`discovery: found ${devices.length} device(s) in ${Date.now() - started}ms`);

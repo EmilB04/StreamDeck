@@ -45,11 +45,21 @@ export type UiStatus = {
 /** One entry in a panel's device or application dropdown. */
 export type UiItem = { label: string; value: string };
 
+/**
+ * A labelled divider in a dropdown, rendered by sdpi-components as an
+ * `<optgroup>`: a heading the user can see but not select. Groups and plain
+ * items can be mixed in one list; a group with no children draws a heading with
+ * nothing under it, so empty ones must be left out rather than sent through.
+ */
+export type UiGroup = { label: string; children: UiItem[] };
+
+export type UiListEntry = UiItem | UiGroup;
+
 /** What the plugin sends back, keyed by the event it answers. */
 export type UiReply =
 	| { event: "getStatus"; status: UiStatus | null }
 	| { event: "getApps"; items: UiItem[] }
-	| { event: "getDevices"; items: UiItem[]; renames?: Record<string, string> }
+	| { event: "getDevices"; items: UiListEntry[]; renames?: Record<string, string> }
 	| { event: "getHeadsetTool"; installed: boolean; binary: string | null };
 
 /**

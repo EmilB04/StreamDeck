@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { mergeGeneric } from "../src/providers/discovery";
-import type { DeviceKind, DiscoveredDevice } from "../src/providers/types";
+import { powerTier } from "../src/providers/types";
+import type { BatteryStatus, DeviceKind, DiscoveredDevice } from "../src/providers/types";
 
 const device = (
 	providerId: string,
@@ -133,5 +134,59 @@ describe("pairing catch-all entries off against the provider that owns the hardw
 		]);
 
 		assert.deepEqual(labels(merged), ["asus/ROG Azoth"]);
+	});
+});
+
+/**
+ * The picker is sorted by this and labelled by this, so a device landing in the
+ * wrong group shows up twice over: in the wrong half of the list, and under the
+ * wrong suffix.
+ */
+describe("grouping devices by what they can say about their power", () => {
+	const reading = (status: BatteryStatus, percent: number | null = null): DiscoveredDevice["reading"] => ({
+		deviceLabel: "x",
+		percent,
+		status,
+	});
+
+	it("puts a readable battery first", () => {
+		const mouse = { ...device("logitech", "G502 X PLUS", true, "mouse"), reading: reading("ok", 77) };
+		assert.equal(powerTier(mouse), 0);
+	});
+
+	it("keeps a device with a battery in the first group while it's asleep", () => {
+		// A mouse that isn't answering still has a battery; it just isn't saying so
+		// this second. Sorting it down with the batteryless ones would move the
+		// user's device around the list depending on whether they'd touched it.
+		const asleep = { ...device("logitech", "G502 X PLUS", true, "mouse"), reading: reading("not-found") };
+		assert.equal(powerTier(asleep), 0);
+	});
+
+	it("puts mains-powered devices second", () => {
+		const mic = { ...device("hid", "HyperX SoloCast", false, "microphone"), reading: reading("mains") };
+		assert.equal(powerTier(mic), 1);
+	});
+
+	it("puts devices with nothing to report last", () => {
+		const hub = { ...device("winbt", "Emils Nest Hub", false, "speaker"), reading: reading("unsupported") };
+		assert.equal(powerTier(hub), 2);
+	});
+
+	it("treats a device that reported nothing at all as the last group", () => {
+		assert.equal(powerTier(device("hid", "Something", false)), 2);
+	});
+
+	it("orders the three groups battery, mains, no data", () => {
+		const devices = [
+			{ ...device("hid", "Nothing", false), reading: reading("unsupported") },
+			{ ...device("hid", "Cable", false), reading: reading("mains") },
+			{ ...device("logitech", "Battery", true), reading: reading("ok", 50) },
+		];
+
+		devices.sort((a, b) => powerTier(a) - powerTier(b));
+		assert.deepEqual(
+			devices.map((d) => d.label),
+			["Battery", "Cable", "Nothing"],
+		);
 	});
 });

@@ -2,6 +2,7 @@ import streamDeck, { action } from "@elgato/streamdeck";
 import type { KeyAction, KeyDownEvent, SendToPluginEvent } from "@elgato/streamdeck";
 import { discovery } from "../providers/discovery";
 import { findHeadsetControl, HEADSETCONTROL_RELEASES } from "../providers/headsetcontrol";
+import { powerTier } from "../providers/types";
 import type { BatteryReading, DeviceKind, DiscoveredDevice } from "../providers/types";
 import { noticeKeyImage } from "../ui/battery-svg";
 import type { Face, KeyState, Reading } from "./key-face";
@@ -9,7 +10,7 @@ import { KeyFaceAction } from "./key-face";
 import { labelOf, withRenames } from "./renames";
 import { nextChargeGuess } from "./charging";
 import type { BatterySettings } from "./settings";
-import type { UiMessage } from "./ui-messages";
+import type { UiListEntry, UiMessage } from "./ui-messages";
 import { replyToPanel } from "./ui-messages";
 import { estimateRemaining, faceColors, formatDuration, recordSample, resolved } from "./settings";
 
@@ -27,13 +28,27 @@ const NOTICE_MS = 2500;
 const LAST_SEEN_TOUCH_MS = 5 * 60_000;
 
 /**
- * How a device reads in the picker. Everything detected is listed, so the entry
- * has to say why one of them won't show a percentage.
+ * Heading for each group in the device picker, in the order they appear.
+ *
+ * Index is the {@link powerTier}, so the headings and the sort can't disagree
+ * about which devices belong under which. These replace the per-entry suffixes
+ * the list used to carry ("… (mains powered)") — a heading says it once for the
+ * whole block instead of repeating it on every line.
  */
-function pickerLabel(device: DiscoveredDevice): string {
-	if (device.supportsBattery) return device.label;
-	if (device.reading?.status === "mains") return `${device.label} (mains powered)`;
-	return `${device.label} (no battery data)`;
+const TIER_HEADINGS = ["Battery", "Mains powered", "No battery data"] as const;
+
+/**
+ * The device list as dropdown groups.
+ *
+ * Devices arrive already sorted by tier (see discovery.ts), but that order is
+ * only visible as a boundary once each block is under its own heading. Empty
+ * tiers are left out: an optgroup with no options still draws its heading.
+ */
+export function groupedDevices(devices: DiscoveredDevice[]): UiListEntry[] {
+	return TIER_HEADINGS.map((label, tier) => ({
+		label,
+		children: devices.filter((d) => powerTier(d) === tier).map((d) => ({ label: d.label, value: d.key })),
+	})).filter((group) => group.children.length > 0);
 }
 
 /** One line for the property inspector's status strip, in the user's terms. */
@@ -236,14 +251,14 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 
 		const devices = withRenames(await discovery.list(force));
 		const settings = await ev.action.getSettings();
-		const items = devices.map((d) => ({ label: pickerLabel(d), value: d.key }));
+		const items: UiListEntry[] = groupedDevices(devices);
 
 		// Keep a previously chosen but currently absent device selectable, otherwise
 		// the dropdown would silently clear the user's configuration.
 		if (settings.deviceKey && !devices.some((d) => d.key === settings.deviceKey)) {
 			items.push({
-				label: `${settings.deviceLabel ?? settings.deviceKey} (not detected)`,
-				value: settings.deviceKey,
+				label: "Not detected",
+				children: [{ label: settings.deviceLabel ?? settings.deviceKey, value: settings.deviceKey }],
 			});
 		}
 
