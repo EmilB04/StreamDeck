@@ -130,7 +130,7 @@ survived if a package ever fails to load on Windows — that's the one that ship
 ## Tests
 
 ```sh
-npm test          # tsc -p tsconfig.test.json && node --test
+npm test          # tsc -p tsconfig.test.json && node scripts/run-tests.mjs
 ```
 
 No test framework and no extra dependencies: `node:test` plus the TypeScript
@@ -138,7 +138,14 @@ already here. Tests compile to CommonJS in `.test-build/` because the plugin's
 own imports are extensionless — the bundler resolves those, and `require` does
 too, while ESM under Node would not.
 
-48 assertions over the logic that's easy to get quietly wrong: the discharge
+`scripts/run-tests.mjs` only expands the file list before handing it to
+`node --test`. That indirection is load-bearing: up to Node 20 the arguments are
+paths and a glob is taken literally, from Node 22 on they are globs and a bare
+directory is taken as a file to execute. CI runs Node 20 — the version Stream
+Deck's runtime declares — so anything relying on the newer behaviour passes
+locally on a modern Node and fails there.
+
+100 cases over the logic that's easy to get quietly wrong: the discharge
 estimator and its refusal to extrapolate from thin evidence, the adaptive poll
 policy, the settings migrations, the provider dedupe, the PlayStation status
 bytes, and the key face — which is asserted against the rendered SVG, since that
