@@ -1,5 +1,99 @@
 # Battery Monitor — release notes
 
+## v1.1.0
+
+Devices that the plugin knew about but couldn't read used to disappear from the
+picker entirely. That's fixed, along with the two provider bugs behind most of
+it — so if a device of yours was missing in 1.0.0, try again.
+
+### Fixed: devices going missing
+
+The catch-all that lists "everything else on HID" skipped the four vendors with
+a provider of their own — Logitech, ASUS, Sony and Razer. Whenever one of those
+providers came up empty, the device vanished from the picker instead of being
+listed without a level. And a provider comes up empty more often than you'd
+think: a vendor tool holding the interface open (G HUB, Armoury Crate, Synapse),
+a device asleep behind its dongle, an unfamiliar HID usage page.
+
+The catch-all now lists every vendor, and duplicate entries are paired off by USB
+vendor/product id. A device its provider described appears once, as before. A
+device its provider missed still appears — without a level, but visible, so you
+can see it exists.
+
+Two provider fixes on top of that:
+
+- **Logitech** — HID++ endpoints were only looked for on usage page `0xff00`,
+  the one Unifying and Lightspeed receivers use. Any Logitech device answering on
+  another vendor page was never spoken to. Any vendor page is probed now. A
+  second bug judged the "has a long-report collection" rule across the whole
+  machine rather than per device, so one receiver could disqualify every other
+  Logitech endpoint — a mouse's receiver could hide a headset.
+- **ASUS** — devices were filtered by form factor *before* being asked for their
+  battery, so a ROG peripheral whose model name wasn't recognised and whose input
+  interface was held by Armoury Crate looked exactly like a motherboard LED
+  controller and was dropped. Every ASUSTek product is asked now; anything that
+  answers the ROG power command is kept whatever it calls itself.
+
+### Device picker
+
+- **Grouped** under **Battery**, **Mains powered** and **No battery data**
+  headings, in that order, so the useful half is the half you land on. The
+  headings replace the per-entry `(mains powered)` suffixes.
+- **Untested hardware is labelled.** Razer, Xbox and DualShock 4 support is
+  written from published protocol documentation and has never been run against a
+  real device. Those entries now read `(untested — please report)` rather than
+  looking identical to verified ones. DualSense and DualSense Edge were verified
+  on hardware and are not marked.
+
+### HeadsetControl
+
+Headsets can't report a level without it, and nothing said so clearly. Both
+battery panels now show a warning at the top while it's missing, with the
+download and a reminder to tick **add to PATH** during install. It disappears
+once the tool is found, and the "Headset support" section at the bottom names the
+copy in use.
+
+### Privacy and security
+
+- **No network requests at all.** The settings panels used to load a UI library
+  from a CDN each time they opened. It's bundled inside the plugin now, so the
+  panels work offline and nothing about your machine reaches a third party.
+- **Fewer antivirus false positives.** The Windows queries no longer pass
+  `-ExecutionPolicy Bypass`, which never did anything for an inline command and
+  is a pattern security tools are built to flag.
+
+### Diagnosing a missing device
+
+`bin/scan.js` now ships inside the installed plugin. It prints every HID
+interface on the machine and what each provider made of them:
+
+```pwsh
+node "$env:APPDATA\Elgato\StreamDeck\Plugins\com.emilberglund.batterymonitor.sdPlugin\bin\scan.js"
+```
+
+The plugin log also gets a per-scan `discovery: headset=1 logitech=2 asus=1 …`
+line, which separates "found nothing" from "the HID layer never loaded".
+
+Note that both include device names and Bluetooth identifiers, so trim them
+before pasting into a public issue if that matters to you.
+
+### Also
+
+- The reading at the top of a settings panel no longer sticks while you scroll.
+- Fixed a CSS bug that pinned panel messages on screen permanently — including
+  the HeadsetControl warning, which claimed the tool was missing on machines that
+  had it.
+
+### Known issues
+
+- A multi-device ASUS receiver (the ROG OMNI, for one) still appears as a single
+  entry named after the receiver, reporting one battery for what may be two
+  devices.
+- A Logitech device that has gone to sleep can drop out of the picker and be
+  replaced by its receiver until it wakes.
+- Razer, Xbox and DualShock 4 remain unverified against hardware. Reports
+  welcome: https://github.com/EmilB04/StreamDeck/issues
+
 ## v1.0.0
 
 First release. A Stream Deck plugin that shows the battery level of your wireless
