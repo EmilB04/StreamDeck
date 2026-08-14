@@ -18,10 +18,6 @@ up.
 Ring or bar, percentage, device icon, and a name line — per key. The `1h` and
 `1m` prefixes are how long since each device was last heard from.
 
-![The same six keys photographed on a physical Stream Deck in a dark room](store/gallery/02-hardware.png)
-
-The same profile on real hardware. Colours are picked for an OLED-ish key at
-arm's length, not for a screenshot.
 
 ![Six key faces labelled healthy, low, charging, switched off, mains powered and lowest of all](store/gallery/03-states.png)
 
