@@ -22,7 +22,7 @@ const BLUETOOTH_PATH = /\{0000112[45]-0000-1000-8000-00805f9b34fb\}/i;
  *   bits 1-0 capacity: 0 critical, 1 low, 2 medium, 3 full
  *
  * Note what's missing: a percentage. The pad reports four steps, so the numbers
- * below are the middle of each step rather than a reading — a key showing "70%"
+ * below are the middle of each step rather than a reading: a key showing "70%"
  * for an Xbox pad means "medium", and it will sit there until the step changes.
  */
 const REPORT_BATTERY = 0x04;
@@ -54,7 +54,7 @@ const READ_ATTEMPTS = 2;
  *
  * Only Bluetooth. Connected through the Xbox Wireless dongle or a USB cable,
  * the controller speaks GIP rather than HID, and its battery isn't in a report
- * this can read — see "Xbox controllers" in the README.
+ * this can read (see "Xbox controllers" in the README).
  *
  * Unverified against hardware: written from xpadneo's decoding rather than from
  * a pad on the bench. `scripts/xbox-probe.mjs` prints what a real one sends.
@@ -137,7 +137,7 @@ export class XboxProvider implements BatteryProvider {
 	}
 }
 
-/** A Microsoft gamepad on a Bluetooth path — no model list involved. */
+/** A Microsoft gamepad on a Bluetooth path: no model list involved. */
 export function isXboxPad(info: HidDeviceInfo): boolean {
 	return (
 		info.path !== undefined &&

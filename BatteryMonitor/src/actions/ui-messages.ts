@@ -4,7 +4,7 @@ import streamDeck from "@elgato/streamdeck";
  * The contract between the plugin and its property inspectors.
  *
  * The panels are plain HTML with inline JavaScript, so nothing here can be
- * enforced across the wire — but naming both directions in one place means the
+ * enforced across the wire, but naming both directions in one place means the
  * three actions can't drift from each other, and a mistyped event name is a
  * compile error on this side rather than a handler that silently never runs.
  *
@@ -18,7 +18,7 @@ export type UiEvent =
 
 /**
  * What arrives from a panel. `event` stays optional because the payload is
- * whatever the panel actually sent — an older or hand-edited one may send
+ * whatever the panel actually sent: an older or hand-edited one may send
  * nothing recognisable, and that has to be a miss rather than a crash.
  */
 export type UiMessage = {
@@ -64,7 +64,7 @@ export type UiReply =
 
 /**
  * Replies to the open panel. Everything goes out through here so a payload has
- * to match {@link UiReply} — the shapes were previously written inline at each
+ * to match {@link UiReply}. The shapes were previously written inline at each
  * call site, which let the same event answer differently from two actions.
  */
 export function replyToPanel(reply: UiReply): Promise<void> {

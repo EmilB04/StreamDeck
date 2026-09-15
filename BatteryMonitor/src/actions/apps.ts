@@ -18,7 +18,7 @@ const CACHE_TTL_MS = 5 * 60_000;
  *    AppsFolder resolves. Those are taken from Get-StartApps.
  *  - Desktop apps appear in Get-StartApps too, but with an AppID of the form
  *    `{KnownFolderGuid}\relative\path.exe`, and AppsFolder does *not* resolve
- *    those — tested, it silently does nothing. Their Start-menu shortcut is
+ *    those: tested, it silently does nothing. Their Start-menu shortcut is
  *    what's launchable, so those come from the .lnk files directly.
  */
 const SCRIPT = [
@@ -35,7 +35,7 @@ const SCRIPT = [
 
 /**
  * Entries the Start menu carries that aren't applications anyone wants a key
- * bound to — uninstallers, readmes, links to a vendor's website.
+ * bound to: uninstallers, readmes, links to a vendor's website.
  */
 const NOISE = /^(uninstall|readme|release notes|documentation|help|manual|website|visit )|uninstall$/i;
 

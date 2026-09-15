@@ -6,8 +6,8 @@ import { hex4 } from "./types";
 const VENDOR_ID = 0x046d;
 
 /**
- * The HID++ endpoint lives on a vendor-defined usage page — 0xff00 on Unifying
- * and Lightspeed receivers, another page on some Logitech G devices — exposing
+ * The HID++ endpoint lives on a vendor-defined usage page (0xff00 on Unifying
+ * and Lightspeed receivers, another page on some Logitech G devices), exposing
  * two collections: usage 0x01 carries the 7-byte short reports, usage 0x02 the
  * 20-byte long ones. Windows hands out a separate handle per collection and
  * rejects a report id that the handle's collection doesn't declare, so both
@@ -37,7 +37,7 @@ const RESPONSE_TIMEOUT_MS = 250;
 
 /**
  * A device that's been sitting still is in power-save and answers its first
- * ping late, if at all — a mouse nobody has touched for a minute needs longer
+ * ping late, if at all: a mouse nobody has touched for a minute needs longer
  * than one that was just moved. Battery reads therefore wait longer and ask
  * twice, while everything else keeps the short timeout: discovery probes empty
  * receiver slots, and each of those costs a full timeout with nothing to show
@@ -253,7 +253,7 @@ export function selectEndpoints(devices: HidDeviceInfo[]): HidppEndpoint[] {
 	//
 	// Deliberately per-endpoint. This used to keep every endpoint or none, judged
 	// across the whole machine, so one device that did split its collections
-	// disqualified every device that hadn't — a receiver could hide a headset.
+	// disqualified every device that hadn't: a receiver could hide a headset.
 	return [...endpoints.values()].filter((e) => e.long || !usageSplit(e));
 }
 
@@ -262,7 +262,7 @@ export function selectEndpoints(devices: HidDeviceInfo[]): HidppEndpoint[] {
  * receivers use.
  *
  * HID++ is a vendor protocol, and which vendor page it is exposed on is the
- * vendor's choice — several Logitech G devices answer on a different one. Pinning
+ * vendor's choice: several Logitech G devices answer on a different one. Pinning
  * 0xff00 meant those were never probed at all, and since the endpoint still has
  * to answer a HID++ ping before anything is reported, being wrong about a page
  * costs one timeout rather than a bogus device.
@@ -529,7 +529,7 @@ async function readDeviceType(link: HidppLink, deviceIndex: number, nameIndex: n
 
 /**
  * Feature 0x0003 getDeviceInfo: the 4-byte unit id is unique per physical unit,
- * which makes it the right thing to persist in settings — unlike the HID path,
+ * which makes it the right thing to persist in settings. Unlike the HID path,
  * it survives replugging and rebooting.
  */
 async function readUnitId(link: HidppLink, deviceIndex: number): Promise<string | null> {

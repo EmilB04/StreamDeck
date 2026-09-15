@@ -8,7 +8,7 @@
  *    off, and the key backs its polling off rather than probing every cycle.
  *
  * A peripheral that's silent behind a dongle that's still plugged in is
- * "not-found", not "unsupported" — the dongle answering is not the device
+ * "not-found", not "unsupported": the dongle answering is not the device
  * answering.
  */
 export type BatteryStatus =
@@ -67,7 +67,7 @@ export interface DiscoveredDevice {
 	hardware?: HardwareId;
 	/**
 	 * True where the protocol behind this entry has never been run against the
-	 * hardware it decodes — written from published documentation instead.
+	 * hardware it decodes, written from published documentation instead.
 	 *
 	 * It reaches the device picker, because the alternative is a device that
 	 * silently reads wrong or reads nothing and looks like a plugin that doesn't
@@ -89,7 +89,7 @@ export interface BatteryProvider {
 	 * Whether a reading from this provider can ever say "charging". False means
 	 * the source carries a level and nothing else (the Windows PnP battery
 	 * property, for one), so a charging device is indistinguishable from one
-	 * sitting still — and the only clue left is the level going up. Defaults to
+	 * sitting still, and the only clue left is the level going up. Defaults to
 	 * true when omitted.
 	 */
 	reportsCharging?: boolean;
@@ -103,11 +103,11 @@ export interface BatteryProvider {
  * How much a device can say about its power, most useful first:
  *
  *   0 has a battery this plugin can read
- *   1 runs off the cable — a real answer, just never a percentage
+ *   1 runs off the cable: a real answer, just never a percentage
  *   2 nothing to say: no battery protocol here, or nothing answering
  *
  * This orders the device picker and names its entries, from one definition so
- * the two can't disagree — a device sorted into the battery group but labelled
+ * the two can't disagree. A device sorted into the battery group but labelled
  * "no battery data" would read as a bug in both places at once.
  */
 export type PowerTier = 0 | 1 | 2;
@@ -122,7 +122,7 @@ export function powerTier(device: DiscoveredDevice): PowerTier {
  * A whole-number percentage inside 0-100.
  *
  * Every provider scales a raw value into a percentage, and each was clamping it
- * differently — a couple only capped the top, so a decode that went negative
+ * differently. A couple only capped the top, so a decode that went negative
  * could paint a key below empty.
  */
 export function clampPercent(value: number): number {

@@ -27,15 +27,15 @@ const RECEIVER_NAME = /wireless|receiver|dongle|lightspeed|bolt|2\.4\s*g/i;
  * them report a battery through a protocol this plugin knows.
  *
  * Cable-powered devices are reported as running on mains rather than as a
- * failure to read a battery — a wired keyboard has no battery to be missing.
+ * failure to read a battery: a wired keyboard has no battery to be missing.
  * Anything wireless, or anything whose name suggests it's a receiver for a
  * wireless peripheral, is left as "unsupported" instead: there may well be a
  * battery there, this plugin just can't see it.
  *
  * Vendors that have a dedicated provider are deliberately *not* skipped here.
  * They used to be, and that turned every way a dedicated provider can come up
- * empty — a vendor tool holding the interface open, an unfamiliar HID++ usage
- * page, a device asleep behind its dongle — into the device vanishing from the
+ * empty (a vendor tool holding the interface open, an unfamiliar HID++ usage
+ * page, a device asleep behind its dongle) into the device vanishing from the
  * picker entirely, for exactly the hardware most likely to hit those cases.
  * {@link mergeGeneric} drops these entries once a real provider has described
  * the same vendor/product, which is the narrower thing that was actually meant.

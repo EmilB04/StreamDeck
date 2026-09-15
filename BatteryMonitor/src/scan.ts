@@ -1,5 +1,5 @@
 /**
- * Standalone device scan — the same discovery the plugin uses, printed to the
+ * Standalone device scan: the same discovery the plugin uses, printed to the
  * terminal. Run it on the machine that runs Stream Deck to check what actually
  * gets detected, without having to read the plugin logs:
  *

@@ -18,7 +18,7 @@ const TIMEOUT_MS = 6000;
  * counterpart: it collapses the rescan-then-read pair a single key press causes,
  * without holding a level long enough for anyone to see it go stale.
  *
- * {@link findHeadsetControl} deliberately doesn't share this — the panel calls it
+ * {@link findHeadsetControl} deliberately doesn't share this: the panel calls it
  * to answer "is the tool installed?", and someone who has just installed it and
  * hit refresh needs a real answer, not a cached "no".
  */
@@ -57,14 +57,14 @@ export const HEADSETCONTROL_RELEASES = "https://github.com/Sapd/HeadsetControl/r
  * Which binary is going to be used, or null when none of the candidates exist.
  *
  * The property inspector asks this so it can say whether headsets will report
- * anything at all — a missing HeadsetControl is the single most common reason
+ * anything at all: a missing HeadsetControl is the single most common reason
  * for a headset showing no level, and it looks identical to an unsupported
  * device unless the panel says so.
  */
 export async function findHeadsetControl(): Promise<string | null> {
 	// Every candidate's outcome, logged as one line when none of them worked.
-	// "Not installed" is the plugin's most consequential claim about a machine —
-	// it drives a warning banner — and a bare "not found" gives whoever has to
+	// "Not installed" is the plugin's most consequential claim about a machine
+	// (it drives a warning banner), and a bare "not found" gives whoever has to
 	// disagree with it nothing to go on.
 	const attempts: string[] = [];
 
@@ -97,7 +97,7 @@ function text(value: unknown): string {
 
 /**
  * Wireless headsets have no public API/SDK (NGENUITY and friends don't expose
- * one), so we shell out to HeadsetControl — https://github.com/Sapd/HeadsetControl —
+ * one), so we shell out to HeadsetControl (https://github.com/Sapd/HeadsetControl),
  * an open-source CLI that has already reverse-engineered the battery HID report
  * for ~100 headsets and ships prebuilt Windows/macOS/Linux binaries.
  *
@@ -143,7 +143,7 @@ export class HeadsetControlProvider implements BatteryProvider {
 
 	/**
 	 * One CLI run serves every key. `-b` already reports every headset it can
-	 * see, so asking once per key only multiplied the process count — and each
+	 * see, so asking once per key only multiplied the process count, and each
 	 * ask re-probed the candidate paths before it could even start.
 	 */
 	private readonly run = coalesce(() => this.exec(), RUN_TTL_MS);
@@ -159,7 +159,7 @@ export class HeadsetControlProvider implements BatteryProvider {
 				});
 				return { ok: true, stdout };
 			} catch (err: any) {
-				// ENOENT just means this candidate path doesn't exist — try the next one.
+				// ENOENT just means this candidate path doesn't exist, so try the next one.
 				if (err?.code === "ENOENT") continue;
 				// A non-zero exit still prints usable JSON on some versions.
 				if (typeof err?.stdout === "string" && err.stdout.trim().startsWith("{")) {

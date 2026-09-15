@@ -1,6 +1,6 @@
 /**
  * Tiny logging seam so the discovery/provider layer doesn't import the Stream
- * Deck SDK — that keeps it runnable outside Stream Deck (see src/scan.ts).
+ * Deck SDK. That keeps it runnable outside Stream Deck (see src/scan.ts).
  * plugin.ts wires this to streamDeck.logger at startup.
  */
 export type Log = {

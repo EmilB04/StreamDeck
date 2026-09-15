@@ -27,7 +27,7 @@ const PULSE_STEPS = 8;
 export type Reading<TSettings> = {
 	reading: BatteryReading;
 	kind: DeviceKind;
-	/** Settings as they now stand — a read may persist something. */
+	/** Settings as they now stand: a read may persist something. */
 	settings: TSettings;
 };
 
@@ -65,7 +65,7 @@ export type KeyState<TSettings> = {
 	drawn?: { reading: BatteryReading; kind: DeviceKind; settings: TSettings };
 	/**
 	 * Last title written, boxed so "never written" is distinguishable from
-	 * "written as undefined" — the latter hands the title back to Stream Deck.
+	 * "written as undefined": the latter hands the title back to Stream Deck.
 	 */
 	titleApplied?: { value: string | undefined };
 	/** When a live reading last arrived, to the second. */
@@ -76,7 +76,7 @@ export type KeyState<TSettings> = {
 	/**
 	 * Whether this key's device looks like it's charging, for a provider that
 	 * can't say so itself. Lives here so it's discarded with everything else when
-	 * the key goes away — see {@link ChargeGuess}.
+	 * the key goes away (see {@link ChargeGuess}).
 	 */
 	charge?: ChargeGuess;
 };
@@ -85,7 +85,7 @@ export type KeyState<TSettings> = {
  * The machinery every battery key shares: a poll chain, the charging pulse, the
  * warning latch, title handling, and painting a face.
  *
- * Subclasses supply the two things that actually differ — where the reading
+ * Subclasses supply the two things that actually differ: where the reading
  * comes from ({@link read}) and how it's presented ({@link present}). Everything
  * else was duplicated across the actions before this existed, and had already
  * started to drift.
@@ -278,7 +278,7 @@ export abstract class KeyFaceAction<TSettings extends BatterySettings> extends S
 			// silently undoing any edit made since.
 			// Whatever the tick managed to read, so a failure after the fetch still
 			// rearms from current settings rather than the ones this timer was
-			// created with — reviving a poll interval the user has since changed.
+			// created with, reviving a poll interval the user has since changed.
 			let latest = settings;
 			action
 				.getSettings()
@@ -311,7 +311,7 @@ export abstract class KeyFaceAction<TSettings extends BatterySettings> extends S
 	}
 
 	/**
-	 * Flashes the warning when the level crosses below the threshold — once per
+	 * Flashes the warning when the level crosses below the threshold, once per
 	 * trip, not once per poll.
 	 *
 	 * Firing on every reading under the threshold is six flashes a minute at a 10s
@@ -342,7 +342,7 @@ export abstract class KeyFaceAction<TSettings extends BatterySettings> extends S
 	/**
 	 * Renders and remembers the reading, so later edits can repaint it for free.
 	 * What's cached is the live reading, before any substitution a subclass makes
-	 * at render time — that's what lets toggling those settings repaint without
+	 * at render time: that's what lets toggling those settings repaint without
 	 * touching the device.
 	 */
 	protected async draw(
@@ -353,7 +353,7 @@ export abstract class KeyFaceAction<TSettings extends BatterySettings> extends S
 	): Promise<void> {
 		const state = this.state(action.id);
 
-		// A number that came off the device just now — the moment worth reporting
+		// A number that came off the device just now: the moment worth reporting
 		// as "last connected", regardless of whether the level moved.
 		if (reading.percent !== null && reading.status !== "stale") state.lastLiveAt = Date.now();
 
@@ -445,8 +445,8 @@ export abstract class KeyFaceAction<TSettings extends BatterySettings> extends S
 	 * undo: Stream Deck restores the manifest's title.
 	 *
 	 * The applied value is remembered so a repaint doesn't re-send an unchanged
-	 * title, and it starts unset so the first paint after a restart always writes
-	 * — which is what clears a title left by a previous run.
+	 * title, and it starts unset so the first paint after a restart always writes,
+	 * which is what clears a title left by a previous run.
 	 */
 	protected async applyTitle(
 		action: KeyAction<TSettings>,

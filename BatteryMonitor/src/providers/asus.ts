@@ -53,7 +53,7 @@ const THRESHOLD_INDEX = 10;
 const ERROR_MARKER = [0xff, 0xaa];
 
 /**
- * Asus ROG peripherals are detected by enumeration — names come from each
+ * Asus ROG peripherals are detected by enumeration: names come from each
  * device's own USB product descriptor, so whatever ROG gear is plugged in shows
  * up without a model list.
  *
@@ -61,7 +61,7 @@ const ERROR_MARKER = [0xff, 0xaa];
  * for this; the command and frame layout were derived on real hardware (see
  * README "Asus battery protocol" and scripts/asus-*), and validated against the
  * percentage and low-battery threshold Armoury Crate displays. A device that
- * doesn't answer is reported as not detected rather than guessed at — it is
+ * doesn't answer is reported as not detected rather than guessed at: it is
  * usually just switched off behind a dongle that's still plugged in.
  */
 export class AsusProvider implements BatteryProvider {
@@ -96,7 +96,7 @@ export class AsusProvider implements BatteryProvider {
 		// whose form factor couldn't be worked out. Filtering on the form factor
 		// first was cheaper, but a ROG mouse whose model name isn't in the list
 		// below and whose input interface is held by Armoury Crate looks exactly
-		// like a motherboard LED controller from here — and dropping it before
+		// like a motherboard LED controller from here, and dropping it before
 		// asking meant it never appeared at all.
 		const all = [...byProduct.values()];
 
@@ -116,7 +116,7 @@ export class AsusProvider implements BatteryProvider {
 		for (const device of candidates) {
 			// Silent, not batteryless: a ROG keyboard that's switched off still
 			// leaves its dongle plugged in and answers nothing. "not-found" is
-			// what a device that may come back looks like — and it lets the key
+			// what a device that may come back looks like, and it lets the key
 			// back off its polling instead of probing something that's asleep.
 			device.reading ??= notFound(device.label, "Detected, but it didn't answer the ROG power command");
 		}
@@ -132,7 +132,7 @@ export class AsusProvider implements BatteryProvider {
 		const devices = await hidDevices(VENDOR_ID);
 		const present = devices?.some((d) => d.productId === productId) ?? false;
 
-		// Either way this is "not answering now", not "has no battery" — the
+		// Either way this is "not answering now", not "has no battery": the
 		// difference is only what to tell the user about why.
 		return notFound(device.label, present ? "Device didn't answer the ROG power command" : "Device not connected");
 	}
@@ -176,7 +176,7 @@ export class AsusProvider implements BatteryProvider {
 	/** Sends the power command on one collection and returns the reply frame. */
 	private exchange(info: HidDeviceInfo, reportId: number): Promise<number[] | null> {
 		// null on a failure to open: the wrong collection for this id, or a busy
-		// interface — either way the caller moves on to the next candidate.
+		// interface: either way the caller moves on to the next candidate.
 		return withHidDevice<number[] | null>(info.path!, null, (device) => {
 			const report = new Array<number>(REPORT_LENGTH).fill(0);
 			report[0] = reportId;
@@ -193,7 +193,7 @@ export class AsusProvider implements BatteryProvider {
 			if (bytes[1] !== CMD_READ_INFO || bytes[2] !== SUB_POWER) return null;
 
 			// A short frame reads as `undefined` at the level offsets, and neither
-			// `undefined < 1` nor `undefined > 100` is true — so the caller's range
+			// `undefined < 1` nor `undefined > 100` is true, so the caller's range
 			// check would wave it through and report a level of `undefined`.
 			if (bytes.length <= PERCENT_MIRROR_INDEX) return null;
 

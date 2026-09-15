@@ -15,7 +15,7 @@ import { replyToPanel } from "./ui-messages";
  *
  * The single-device action answers "how is this headset doing"; this one
  * answers "is anything about to die on me", which is the question you actually
- * have when five keys each show a healthy number. It reads nothing itself —
+ * have when five keys each show a healthy number. It reads nothing itself:
  * discovery has already collected every device's level, so this is a choice
  * made over readings that exist, not extra work on the devices.
  */

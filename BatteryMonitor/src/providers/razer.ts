@@ -49,13 +49,13 @@ const USAGE_MOUSE = 0x02;
 const USAGE_KEYBOARD = 0x06;
 
 /**
- * Razer peripherals — wireless mice, keyboards and headsets.
+ * Razer peripherals: wireless mice, keyboards and headsets.
  *
  * Nothing is hard-coded per model: any Razer device that answers the power
  * command reports its level, so a Viper, a BlackWidow or a Basilisk all work
  * through the same path, and a model released tomorrow needs no change here.
  *
- * Unverified against hardware — this was written from OpenRazer's protocol
+ * Unverified against hardware: this was written from OpenRazer's protocol
  * rather than from a device on the bench (see scripts/razer-probe.mjs, which
  * prints what a real one answers).
  */
@@ -95,7 +95,7 @@ export class RazerProvider implements BatteryProvider {
 
 			device.reading = answer
 				? answer.reading
-				: // Silent rather than batteryless — the device may simply be asleep,
+				: // Silent rather than batteryless: the device may simply be asleep,
 					// so this reads as absent and lets the poll back off.
 					notFound(label, "Detected, but it didn't answer the Razer power command");
 

@@ -1,8 +1,8 @@
 /**
  * Guessing whether a device is on a charger, for providers that can't say.
  *
- * The Windows PnP battery property — which is how a phone or a plain Bluetooth
- * peripheral reports — carries a percentage and nothing else, so a handset on a
+ * The Windows PnP battery property, which is how a phone or a plain Bluetooth
+ * peripheral reports, carries a percentage and nothing else, so a handset on a
  * cable looks exactly like one in a pocket. The one thing that can't happen off
  * a charger is the level going *up*, so that's the whole signal.
  *
@@ -34,7 +34,7 @@ export type ChargeGuess = {
  * Folds a new reading into the guess.
  *
  * Rising means charging. A drop means it isn't. A level that merely *holds*
- * keeps the guess — but only at 100%, where holding is what a full battery on a
+ * keeps the guess, but only at 100%, where holding is what a full battery on a
  * charger does, or for {@link CHARGE_HOLD_MS} below that, after which a hold is
  * better explained by the cable having been pulled out.
  *

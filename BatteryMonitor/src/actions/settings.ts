@@ -21,7 +21,7 @@ export type BatterySettings = {
 	/** Last known label/kind, so a disconnected device still renders sensibly. */
 	deviceLabel?: string;
 	deviceKind?: DeviceKind;
-	/** Overrides the name the device reports — Windows calls one phone here "4". */
+	/** Overrides the name the device reports: Windows calls one phone here "4". */
 	displayName?: string;
 	/** Overrides the drawn form factor; "auto" believes the provider. */
 	iconKind?: DeviceKind | "auto";
@@ -30,7 +30,7 @@ export type BatterySettings = {
 	powerSource?: PowerSource;
 	/**
 	 * What a press opens, on top of always reading the battery. Empty means it
-	 * only reads the battery — there is no separate on/off for this, since an
+	 * only reads the battery: there is no separate on/off for this, since an
 	 * app being set is itself the switch.
 	 *
 	 * `pressTarget` is what the app picker writes; `pressCustomTarget` is a path
@@ -114,8 +114,8 @@ export function recordSample(history: Sample[] | undefined, percent: number, at:
  * or null when there isn't enough history to say.
  *
  * The oldest and newest samples give the rate. A median-of-intervals would
- * resist a single odd reading better, but wireless gauges move in steps of 10%
- * — over a handful of steps the endpoints *are* the trend, and anything
+ * resist a single odd reading better, but wireless gauges move in steps of 10%,
+ * and over a handful of steps the endpoints *are* the trend, so anything
  * cleverer would be fitting noise.
  */
 export function estimateRemaining(history: Sample[] | undefined, percent: number, now: number): number | null {
@@ -135,7 +135,7 @@ export function estimateRemaining(history: Sample[] | undefined, percent: number
 	return remaining;
 }
 
-/** "3h 20m", "45m", "2d" — short enough for the key's name line. */
+/** "3h 20m", "45m", "2d": short enough for the key's name line. */
 export function formatDuration(ms: number): string {
 	const minutes = Math.round(ms / 60_000);
 	if (minutes < 60) return `${minutes}m`;
@@ -257,7 +257,7 @@ export type Resolved<T extends BatterySettings> = T & typeof DEFAULTS;
  * field instead of remembering which default belongs to it.
  *
  * `?? DEFAULTS.x` was written out at eighteen call sites across three files,
- * which is eighteen chances to reach for the wrong default or forget one — and
+ * which is eighteen chances to reach for the wrong default or forget one, and
  * a key whose settings predate a field relies on exactly that fallback.
  *
  * Explicit `undefined` is treated as absent: Stream Deck round-trips settings
@@ -305,7 +305,7 @@ export function migrate<T extends BatterySettings>(settings: T): (T & BatterySet
 
 	// v5 -> v6: adaptive became the default. Keys sitting on "fixed" are there
 	// because that was the shipped default rather than because anyone chose it,
-	// so they follow — the same rule the colours use. Choosing fixed again after
+	// so they follow the same rule the colours use. Choosing fixed again after
 	// this sticks, since the version has already moved past it.
 	if (version < SETTINGS_VERSION && (migrated.pollMode === undefined || migrated.pollMode === "fixed")) {
 		migrated.pollMode = DEFAULTS.pollMode;

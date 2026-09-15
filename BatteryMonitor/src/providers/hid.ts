@@ -29,7 +29,7 @@ export async function loadHid(): Promise<typeof HidModule | null> {
  * Opens a HID interface, runs `use`, and closes it again whatever happens.
  *
  * Every provider had its own copy of this open/try/finally dance, and the
- * handles are exclusive on Windows — one early return that skipped the close
+ * handles are exclusive on Windows: one early return that skipped the close
  * would lock the device out until Stream Deck restarted. Returns `fallback` if
  * the interface can't be opened or the work throws, because a provider must
  * never take down a scan.
@@ -54,7 +54,7 @@ export async function withHidDevice<T>(
 		try {
 			device?.close();
 		} catch {
-			// Already gone — unplugged mid-read, most likely.
+			// Already gone: unplugged mid-read, most likely.
 		}
 	}
 }

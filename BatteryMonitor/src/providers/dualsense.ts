@@ -23,7 +23,7 @@ const PRODUCTS = new Map<number, { label: string; family: PadFamily }>([
 /**
  * DualShock 4 input reports: 0x01 over USB, 0x11 over Bluetooth (which carries
  * two extra header bytes). One byte holds both the level and whether the cable
- * is in — the same idea as the PS5's status byte, in a different place.
+ * is in, the same idea as the PS5's status byte, in a different place.
  *
  *   [0..3] level, 0-10 on battery and 0-11 while charging
  *   [4]    cable state
@@ -58,7 +58,7 @@ const STATUS_INDEX_BT = 54;
 
 /**
  * Calibration data. Reading it is what makes a Bluetooth pad switch to the full
- * 0x31 report — the same thing any game does when it takes over the controller.
+ * 0x31 report, the same thing any game does when it takes over the controller.
  * It is a GET_FEATURE, so nothing is written to the device.
  */
 const FEATURE_CALIBRATION = 0x05;
@@ -186,7 +186,7 @@ export class DualSenseProvider implements BatteryProvider {
 				if (index !== null && bytes.length > index) return bytes[index];
 
 				// A Bluetooth pad in compatibility mode pads its short report out to
-				// the full length, so length alone can't tell them apart — the report
+				// the full length, so length alone can't tell them apart: the report
 				// id can. Ask for the calibration data once; that flips it to the full
 				// report (0x31 on a DualSense, 0x11 on a DualShock 4).
 				if (overBluetooth && !askedForFullReports) {
@@ -223,7 +223,7 @@ export function statusIndexOf(bytes: number[], overBluetooth: boolean, family: P
 /**
  * DualShock 4: one nibble for the level, one bit for the cable.
  *
- * The scale changes with the cable — 0-10 on battery, 0-11 while charging —
+ * The scale changes with the cable (0-10 on battery, 0-11 while charging),
  * which is why the two cases divide by different totals. Unverified against
  * hardware; the layout is the one Linux's hid-sony driver uses.
  */
@@ -252,7 +252,7 @@ export function decodeStatus(status: number, label: string): BatteryReading {
 	const percent = clampPercent(level * 10 + 5);
 
 	// Both charge states mean the cable is attached, so both show the charging
-	// indicator — the same call logitech.ts makes for its "charge complete".
+	// indicator, the same call logitech.ts makes for its "charge complete".
 	// Sony reports "complete" well before the gauge reads full (0x28 = complete
 	// at level 8), so the pad's own level is kept rather than rounded up to 100.
 	// A level of 0 alongside "complete" is the one case that can't be meant

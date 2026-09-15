@@ -28,7 +28,7 @@ export type RenamingSettings = BatterySettings & {
  * Windows calls one phone on the dev machine "4", and a Bluetooth speaker
  * "Bluetooth device"; the name comes from the OS or the device's own descriptor
  * and often can't be fixed at the source. A key's Nickname solves it for that
- * one key — this solves it for every key, every picker and both other actions,
+ * one key. This solves it for every key, every picker and both other actions,
  * because the name belongs to the device rather than to a key.
  *
  * Nothing outside this plugin is touched: no OS record, no device firmware. The
@@ -70,7 +70,7 @@ export class DeviceRenamingAction extends SingletonAction<RenamingSettings> {
 		const target = ev.payload.settings.renameTarget?.trim() ?? "";
 		const previous = this.targets.get(ev.action.id);
 
-		// Switching device loads that device's own name — empty for one that
+		// Switching device loads that device's own name, empty for one that
 		// hasn't been renamed. Without this the text left in the box from the last
 		// device would be applied to the new one the moment anything else changed,
 		// quietly renaming a device the user only meant to look at.
@@ -113,7 +113,7 @@ export class DeviceRenamingAction extends SingletonAction<RenamingSettings> {
 
 	/**
 	 * Feeds the picker. Entries show the name in force and, when it isn't the
-	 * device's own, what it's called underneath — otherwise a renamed device is
+	 * device's own, what it's called underneath. Otherwise a renamed device is
 	 * impossible to find again in a list of names you invented.
 	 */
 	private async sendDevices(force = false): Promise<void> {

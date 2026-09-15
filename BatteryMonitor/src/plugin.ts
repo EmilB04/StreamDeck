@@ -33,7 +33,7 @@ streamDeck.settings.onDidReceiveGlobalSettings<GlobalSettings>((ev) => {
 
 // Only after connecting: getGlobalSettings is a request to Stream Deck, and
 // issuing one before the socket exists leaves every later request queued behind
-// it — which showed up as every key's poll timing out, not as an error here.
+// it. That showed up as every key's poll timing out, not as an error here.
 streamDeck
 	.connect()
 	.then(async () => {

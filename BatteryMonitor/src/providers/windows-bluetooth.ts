@@ -47,8 +47,8 @@ const SCRIPT = [
 /**
  * How long one PowerShell result is reused.
  *
- * Deliberately short. A single key press already asks twice — the rescan behind
- * `discovery.list(force)` and then the direct `read()` for that one device — and
+ * Deliberately short. A single key press already asks twice: the rescan behind
+ * `discovery.list(force)` and then the direct `read()` for that one device, and
  * this collapses that pair into one process without letting a later poll be
  * served anything a user would notice as stale.
  */
@@ -59,7 +59,7 @@ export type PnpBattery = { id: string; name: string; level: number | null };
 /**
  * Detects Bluetooth peripherals that report battery to Windows itself. This is
  * the only vendor-independent source of battery levels on the machine, so it
- * picks up keyboards, mice and controllers no dedicated provider knows about —
+ * picks up keyboards, mice and controllers no dedicated provider knows about,
  * as long as they're paired over Bluetooth rather than a proprietary 2.4 GHz
  * dongle (dongle-connected devices are invisible to the OS battery property).
  */
@@ -128,7 +128,7 @@ export class WindowsBluetoothProvider implements BatteryProvider {
 			const list: unknown[] = Array.isArray(parsed) ? parsed : [parsed];
 			// Everything downstream trusts these three fields, so they're pinned to
 			// their types here rather than checked again at each use. A missing
-			// property comes back as JSON null, and Number(null) is 0 — which would
+			// property comes back as JSON null, and Number(null) is 0, which would
 			// report a healthy device as flat. Only a real number counts.
 			return list
 				.filter((e): e is Record<string, unknown> => !!e && typeof e === "object")
@@ -139,7 +139,7 @@ export class WindowsBluetoothProvider implements BatteryProvider {
 					level: typeof e.level === "number" && Number.isFinite(e.level) ? e.level : null,
 				}));
 		} catch (err) {
-			// PowerShell missing/blocked, or no Bluetooth stack — just contribute
+			// PowerShell missing/blocked, or no Bluetooth stack: just contribute
 			// nothing. Logged because an empty list is otherwise indistinguishable
 			// from a machine that genuinely has no paired devices.
 			log.warn(`windows-bluetooth: could not read paired devices: ${String(err)}`);
@@ -154,7 +154,7 @@ export function toReading(entry: PnpBattery): BatteryReading {
 	// Only Bluetooth LE devices that implement the GATT battery service get the
 	// property. A Classic device without it may well have a battery Windows can't
 	// see (AirPods report theirs over Apple's own protocol), so this says
-	// "unreadable", not "mains" — the key's power-source setting is how you tell
+	// "unreadable", not "mains". The key's power-source setting is how you tell
 	// it the thing is permanently plugged in.
 	if (entry.level === null) {
 		return {

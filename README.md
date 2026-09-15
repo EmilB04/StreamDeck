@@ -7,13 +7,13 @@ per plugin, each self-contained: its own `package.json`, build, tests and docs.
 
 | Plugin | What it does | Platform | Download |
 |---|---|---|---|
-| [**Battery Monitor**](BatteryMonitor/) | Battery level of auto-detected wireless peripherals — headsets, mice, keyboards, controllers and paired Bluetooth devices — on a key, with a low warning and a "whatever is emptiest" key. | Windows 10+ | [Latest release](https://github.com/EmilB04/StreamDeck/releases/latest) |
+| [**Battery Monitor**](BatteryMonitor/) | Battery level of auto-detected wireless peripherals (headsets, mice, keyboards, controllers and paired Bluetooth devices) on a key, with a low warning and a "whatever is emptiest" key. | Windows 10+ | [Latest release](https://github.com/EmilB04/StreamDeck/releases/latest) |
 
 ### Battery Monitor
 
 [![Battery Monitor keys on a Stream Deck](BatteryMonitor/store/gallery/01-thumbnail.png)](BatteryMonitor/)
 
-A controller, a phone, a headset, a mouse and a keyboard — five keys, no model
+A controller, a phone, a headset, a mouse and a keyboard: five keys, no model
 list anywhere in the code. More screenshots in the
 [plugin README](BatteryMonitor/README.md#what-it-looks-like).
 
@@ -24,8 +24,8 @@ list anywhere in the code. More screenshots in the
 2. Double-click it. The Stream Deck app installs it and asks for nothing else.
 3. Drag one of the plugin's actions onto a key.
 
-Removing it again is Stream Deck's own uninstall — right-click the plugin in the
-store pane, no leftovers to clean up by hand.
+Removing it again is Stream Deck's own uninstall. Right-click the plugin in the
+store pane; no leftovers to clean up by hand.
 
 Battery Monitor also needs Node.js 20+ on the machine running Stream Deck, and
 [HeadsetControl](https://github.com/Sapd/HeadsetControl/releases) on `PATH` if you
@@ -55,7 +55,7 @@ npm run typecheck && npm run lint && npm run format:check && npm test
 
 ## Releasing
 
-Push a tag of the form `<plugin>-v<version>` — `battery-monitor-v1.1.0`.
+Push a tag of the form `<plugin>-v<version>`, e.g. `battery-monitor-v1.1.0`.
 `.github/workflows/release.yml` builds that plugin, packs it, and attaches the
 `.streamDeckPlugin` file to a GitHub release. `workflow_dispatch` on the same
 workflow packs without releasing, leaving the file as a build artifact.
@@ -67,4 +67,4 @@ case in `release.yml`, and a job or matrix entry in `ci.yml`.
 
 ## Licence
 
-MIT with attribution — see [LICENSE](LICENSE).
+MIT with attribution, see [LICENSE](LICENSE).

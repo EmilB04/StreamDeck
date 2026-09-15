@@ -31,7 +31,7 @@ const LAST_SEEN_TOUCH_MS = 5 * 60_000;
  *
  * Index is the {@link powerTier}, so the headings and the sort can't disagree
  * about which devices belong under which. These replace the per-entry suffixes
- * the list used to carry ("… (mains powered)") — a heading says it once for the
+ * the list used to carry ("… (mains powered)"): a heading says it once for the
  * whole block instead of repeating it on every line.
  */
 const TIER_HEADINGS = ["Battery", "Mains powered", "No battery data"] as const;
@@ -109,7 +109,7 @@ function ageLabel(at: number | undefined): string {
  * One device on one key: its level, and what it's doing.
  *
  * The polling, pulsing, titles and warnings live in {@link KeyFaceAction}. What
- * belongs here is everything specific to watching one chosen device — resolving
+ * belongs here is everything specific to watching one chosen device: resolving
  * it, remembering what it last said, and the substitutions that make a missing
  * reading useful rather than blank.
  */
@@ -194,7 +194,7 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 
 	/**
 	 * What to call the device. A nickname typed on this key wins over the one it
-	 * reports — Windows names one phone on the dev machine "4", and no amount of
+	 * reports: Windows names one phone on the dev machine "4", and no amount of
 	 * probing improves on a name the owner chose.
 	 */
 	protected override label(settings: BatterySettings, reading: BatteryReading): string {
@@ -212,7 +212,7 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 	}
 
 	/**
-	 * A press means "tell me now", so it bypasses the discovery cache — and a
+	 * A press means "tell me now", so it bypasses the discovery cache, and a
 	 * forced scan takes a couple of seconds.
 	 *
 	 * The warning therefore goes up *before* the scan rather than after it. The
@@ -274,7 +274,7 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 	/**
 	 * Tells the property inspector what the key is currently showing, so the panel
 	 * opens with an answer rather than only questions. It reports the reading
-	 * already drawn — no device is touched — so the panel can ask as often as it
+	 * already drawn: no device is touched, so the panel can ask as often as it
 	 * likes.
 	 */
 	private async sendStatus(actionId: string): Promise<void> {
@@ -300,9 +300,9 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 	}
 
 	/**
-	 * Puts a message on the key for a moment. Painting is suspended while it's up
-	 * — the refresh running behind it would otherwise replace it with the face
-	 * mid-message — and resumes when the face is restored.
+	 * Puts a message on the key for a moment. Painting is suspended while it's up,
+	 * since the refresh running behind it would otherwise replace it with the face
+	 * mid-message, and resumes when the face is restored.
 	 */
 	private async notify(action: KeyAction<BatterySettings>, settings: BatterySettings): Promise<void> {
 		const state = this.state(action.id);
@@ -360,8 +360,8 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 	 * level that has risen since the last reading is the one thing that can't
 	 * happen off a charger, so that's the signal; it stays set while the level
 	 * holds (a phone parked at 100% is still plugged in) and clears when the level
-	 * drops. It's a guess, and below 100% it's time-boxed too — see
-	 * CHARGE_HOLD_MS — otherwise unplugging at a level the device then holds
+	 * drops. It's a guess, and below 100% it's time-boxed too (see
+	 * CHARGE_HOLD_MS), otherwise unplugging at a level the device then holds
 	 * would keep the bolt for as long as the device is slow to lose that level.
 	 */
 	private inferCharging(
@@ -386,7 +386,7 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 	/**
 	 * Substitutes the last known level when the live reading has no number of its
 	 * own, so a device that's off or out of range shows where it was rather than a
-	 * dash. The result is marked "stale" so the face renders it faded — the level
+	 * dash. The result is marked "stale" so the face renders it faded: the level
 	 * is still useful, it just isn't current.
 	 */
 	private withLastKnown(settings: BatterySettings, reading: BatteryReading): BatteryReading {
@@ -395,7 +395,7 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 		if (reading.status === "mains") return reading;
 
 		// A stored level is the proof that matters. "unsupported" normally means
-		// the device has no battery to read — but a ROG receiver whose keyboard is
+		// the device has no battery to read, but a ROG receiver whose keyboard is
 		// switched off says exactly that, because the dongle is still plugged in
 		// and only the device behind it went quiet. If this key has read a
 		// percentage from it before, the battery is real and the provider is
@@ -465,7 +465,7 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 	}
 
 	/**
-	 * Text for the small line under the meter — empty when there shouldn't be one.
+	 * Text for the small line under the meter: empty when there shouldn't be one.
 	 *
 	 * There's no user-typed title to defer to: the actions set
 	 * `UserTitleEnabled: false`, so Stream Deck hides its Title field and

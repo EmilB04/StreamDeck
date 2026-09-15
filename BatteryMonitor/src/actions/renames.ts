@@ -17,7 +17,7 @@ export type RenameMap = Record<string, string>;
 
 /**
  * Read-through cache. Global settings are a round-trip to Stream Deck, and
- * labels are resolved on every repaint — including every pulse frame.
+ * labels are resolved on every repaint, including every pulse frame.
  */
 let cache: RenameMap | undefined;
 

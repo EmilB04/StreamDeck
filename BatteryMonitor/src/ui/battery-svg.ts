@@ -29,13 +29,13 @@ export type FaceOptions = {
 	colors: FaceColors;
 	/**
 	 * Marks the face as "the emptiest of several" rather than one device's own
-	 * reading — the two look identical otherwise, and a key that means something
+	 * reading. The two look identical otherwise, and a key that means something
 	 * different should say so.
 	 */
 	lowest?: boolean;
 	/**
 	 * Charging animation phase, 0..1. Stream Deck rasterises SVG statically, so
-	 * SMIL/CSS animation does nothing — movement has to come from the plugin
+	 * SMIL/CSS animation does nothing, so movement has to come from the plugin
 	 * re-rendering with a new phase. Ignored unless the status is "charging".
 	 */
 	pulse?: number;
@@ -167,7 +167,7 @@ const MIN_FONT_SIZE = 8;
  * Wraps a key's contents in the SVG shell and hands back what setImage wants.
  *
  * A bare `<svg>` string is silently ignored by Stream Deck and the key keeps
- * its manifest image, so the data URI isn't optional — which is exactly why
+ * its manifest image, so the data URI isn't optional. That is exactly why
  * every entry point went through the same three lines before this existed.
  */
 function keyImage(background: string, body: string): string {
@@ -187,7 +187,7 @@ function escapeXml(value: string): string {
  * Line art for the device's form factor, drawn on the shared 24×24 grid.
  *
  * Each glyph is stroked rather than filled, at one weight, with round caps and
- * joins — small solid shapes are reserved for the details that need to read at
+ * joins. Small solid shapes are reserved for the details that need to read at
  * ~20px (keycaps, buttons), where a stroked outline would fill in. Everything is
  * built from the silhouette a person would recognise across a desk: a phone is
  * its screen, a mic is its capsule and arc, a speaker is its driver.
@@ -263,7 +263,7 @@ function deviceGlyph(kind: DeviceKind, color: string): string {
 
 /**
  * Marks the "lowest of several" face: a chevron pointing at the bottom of the
- * pile, in the top left where this plugin keeps its corner markers — the same
+ * pile, in the top left where this plugin keeps its corner markers: the same
  * spot as the charging bolt and the offline glyph.
  *
  * That shared corner is why it yields to the bolt while charging: one marker at
@@ -342,13 +342,13 @@ function ringMeter(percent: number | null, color: string, options: FaceOptions, 
 type Block = { height: number; render: (y: number) => string };
 
 /**
- * A short message on the key, for something the user needs told right now — a
+ * A short message on the key, for something the user needs told right now: a
  * press on a device that isn't there. Stream Deck has no toast or tooltip a
  * plugin can raise, so the key itself has to carry the words; the caller puts
  * the normal face back afterwards.
  *
  * The text is sized so its longest word fits the key, then wrapped greedily at
- * that size — at 72px that's a dozen characters a line.
+ * that size; at 72px that's a dozen characters a line.
  */
 export function noticeKeyImage(message: string, colors: FaceColors): string {
 	const words = message.split(/\s+/).filter(Boolean);
@@ -382,7 +382,7 @@ export function noticeKeyImage(message: string, colors: FaceColors): string {
 /**
  * Face for the renaming key: a luggage-tag glyph over "renamed / detected".
  *
- * It shows counts rather than a device because it isn't about one device — the
+ * It shows counts rather than a device because it isn't about one device. The
  * useful thing at a glance is whether any names are in force at all.
  */
 export function renameKeyImage(renamed: number, detected: number, colors: FaceColors): string {
@@ -399,7 +399,7 @@ export function renameKeyImage(renamed: number, detected: number, colors: FaceCo
 }
 
 /**
- * Renders the key face as an SVG data URI, which is what setImage expects — a
+ * Renders the key face as an SVG data URI, which is what setImage expects. A
  * bare <svg> string is silently ignored by Stream Deck and the key keeps its
  * manifest image.
  *
@@ -472,7 +472,7 @@ export function batteryKeyImage(options: FaceOptions): string {
 
 	const ring = isRing ? ringMeter(percent, color, options, opacity) : "";
 
-	// A last-known reading is faded as a whole — outline and icon included — so it
+	// A last-known reading is faded as a whole (outline and icon included) so it
 	// can't be mistaken for a live one, and marked with a "disconnected" glyph.
 	const face =
 		status === "stale"
@@ -493,7 +493,7 @@ export function batteryKeyImage(options: FaceOptions): string {
 			: "";
 
 	// The bolt marks charging even when the colour is close to the "high" colour.
-	// Top left, the same corner the offline glyph uses — a device can't be both
+	// Top left, the same corner the offline glyph uses. A device can't be both
 	// charging and gone, so they never collide.
 	const bolt =
 		status === "charging"

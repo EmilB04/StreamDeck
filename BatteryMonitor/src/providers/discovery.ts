@@ -94,13 +94,13 @@ class DeviceDiscovery {
 		});
 
 		// Per-provider counts, because the total alone can't tell "the HID
-		// providers found nothing" from "node-hid never loaded" — which is the
+		// providers found nothing" from "node-hid never loaded", which is the
 		// first thing worth knowing when someone reports a missing device.
 		log.info(`discovery: ${counts.join(" ")}`);
 
 		const devices = mergeGeneric(found);
 
-		// Grouped by how much each device can say about its power — readable
+		// Grouped by how much each device can say about its power: readable
 		// batteries, then mains-powered, then the ones with nothing to report.
 		// The picker defaults to the top entry and the catch-all list is long, so
 		// the useful half has to be the half you land on.
@@ -125,8 +125,8 @@ export const discovery = new DeviceDiscovery();
  * HeadsetControl device and a plain HID interface. Only one of those knows how
  * to read its battery, and the picker shouldn't offer the other.
  *
- * Names are what's available to match on — they all come from the device's own
- * product string — so they're compared loosely: the HID layer prefixes the
+ * Names are what's available to match on: they all come from the device's own
+ * product string, so they're compared loosely: the HID layer prefixes the
  * manufacturer ("HP, Inc HyperX Cloud Alpha Wireless") where HeadsetControl
  * doesn't. A false match only costs a duplicate entry that said less than the
  * one it was dropped for.
@@ -136,7 +136,7 @@ export function mergeGeneric(devices: DiscoveredDevice[]): DiscoveredDevice[] {
 
 	// Hardware a dedicated provider described, whether or not it got a level out
 	// of it. The catch-all lists every vendor, including the four with providers
-	// of their own, so that a device its provider missed is still offered — but
+	// of their own, so that a device its provider missed is still offered, but
 	// one the provider *did* describe would otherwise appear twice.
 	const claimed = new Set(
 		devices.filter((d) => d.providerId !== GENERIC_HID_ID && d.hardware).map((d) => hardwareKey(d.hardware!)),
