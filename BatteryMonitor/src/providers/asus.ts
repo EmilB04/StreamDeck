@@ -163,7 +163,7 @@ export class AsusProvider implements BatteryProvider {
 			if (mirror !== percent) {
 				log.warn(
 					`asus: power frame disagrees with itself ([${PERCENT_INDEX}]=${percent}, ` +
-						`[${PERCENT_MIRROR_INDEX}]=${mirror}, threshold=${frame[THRESHOLD_INDEX]}) — using ${percent}`,
+						`[${PERCENT_MIRROR_INDEX}]=${mirror}, threshold=${frame[THRESHOLD_INDEX]}), using ${percent}`,
 				);
 			}
 

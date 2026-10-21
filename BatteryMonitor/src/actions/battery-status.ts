@@ -5,7 +5,7 @@ import { powerTier } from "../providers/types";
 import type { BatteryReading, DeviceKind, DiscoveredDevice } from "../providers/types";
 import { noticeKeyImage } from "../ui/battery-svg";
 import type { Face, KeyState, Reading } from "./key-face";
-import { KeyFaceAction } from "./key-face";
+import { KeyFaceAction, PREVIEW_MAX_AGE_MS } from "./key-face";
 import { labelOf, withRenames } from "./renames";
 import { nextChargeGuess } from "./charging";
 import type { BatterySettings } from "./settings";
@@ -60,7 +60,21 @@ export function groupedDevices(devices: DiscoveredDevice[]): UiListEntry[] {
  * only one who can confirm it either way.
  */
 function pickerLabel(device: DiscoveredDevice): string {
-	return device.unverified ? `${device.label} (untested — please report)` : device.label;
+	return device.unverified ? `${device.label} (untested, please report)` : device.label;
+}
+
+/**
+ * Whether a reading means the device isn't there to ask, which is when a
+ * backup device takes over. "unsupported" isn't offline: the device answered,
+ * there's just no battery in what it said.
+ */
+function isOffline(reading: BatteryReading): boolean {
+	return reading.status === "not-found" || reading.status === "error";
+}
+
+/** What a key watches, as one value, so a change to either device can be spotted. */
+function watching(settings: BatterySettings): string {
+	return `${settings.deviceKey ?? ""}|${settings.backupDeviceKey ?? ""}`;
 }
 
 /** One line for the property inspector's status strip, in the user's terms. */
@@ -71,7 +85,7 @@ function statusWording(reading: BatteryReading): string {
 		case "mains":
 			return "Mains powered";
 		case "stale":
-			return "Disconnected — last known level";
+			return "Disconnected, showing last known level";
 		case "not-found":
 			return "Not detected";
 		case "unsupported":
@@ -131,6 +145,7 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 	): Promise<Reading<BatterySettings>> {
 		const charge = this.charge(action.id);
 		charge.deviceKey = settings.deviceKey;
+		this.state(action.id).watching = watching(settings);
 
 		const device = await this.resolve(action, settings, force);
 		if (!device) {
@@ -138,6 +153,10 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 			// which isn't the same as charging now.
 			charge.rising = false;
 			charge.risingSince = undefined;
+
+			const backup = await this.readBackup(action, settings);
+			if (backup) return backup;
+
 			return {
 				settings,
 				kind: settings.deviceKind ?? "other",
@@ -156,6 +175,16 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 		// second round-trip when the scan didn't produce one (or it's stale).
 		const reported = !force && device.reading ? device.reading : await this.readDevice(device);
 
+		if (isOffline(reported)) {
+			const backup = await this.readBackup(action, settings);
+			if (backup) {
+				// Still worth keeping the main device's name and kind current. Its level
+				// is null here, so nothing about its battery history is touched.
+				const current = await this.remember(action, backup.settings, device, reported);
+				return { ...backup, settings: current };
+			}
+		}
+
 		// Compared against the stored level, so this has to happen before
 		// `remember` overwrites it with the new one.
 		const live = this.inferCharging(action.id, settings, device, reported);
@@ -169,6 +198,27 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 		}
 
 		return { settings: current, reading: live, kind: device.kind };
+	}
+
+	/**
+	 * The device's level from the last scan, when there's a recent one, or else
+	 * the last level this key stored, drawn as last-known. Nothing is persisted
+	 * and nothing is remembered as drawn: a press during the preview must act on
+	 * a real reading, not on this.
+	 */
+	protected override preview(settings: BatterySettings): Reading<BatterySettings> | undefined {
+		const device = settings.deviceKey
+			? discovery.peek(PREVIEW_MAX_AGE_MS)?.find((d) => d.key === settings.deviceKey)
+			: undefined;
+		if (device?.reading) return { settings, reading: device.reading, kind: device.kind };
+
+		if (settings.lastPercent === undefined || !resolved(settings).showLastKnown) return undefined;
+		return {
+			settings,
+			kind: settings.deviceKind ?? "other",
+			// No number of its own, so present() substitutes the stored one.
+			reading: { deviceLabel: settings.deviceLabel ?? "Device", percent: null, status: "not-found" },
+		};
 	}
 
 	/**
@@ -198,6 +248,11 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 	 * probing improves on a name the owner chose.
 	 */
 	protected override label(settings: BatterySettings, reading: BatteryReading): string {
+		// The nickname names the main device, so a backup standing in for it goes
+		// by its own name: showing "Keyboard" over the wired one would hide that
+		// the wireless one is off.
+		if (reading.fromBackup) return labelOf(settings.backupDeviceKey, reading.deviceLabel);
+
 		// Nickname is this key's own answer and wins; a rename is the plugin-wide
 		// one; the device's own name is the fallback.
 		return settings.displayName?.trim() || labelOf(settings.deviceKey, reading.deviceLabel);
@@ -208,7 +263,7 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 		action: KeyAction<BatterySettings>,
 		settings: BatterySettings,
 	): Promise<boolean> {
-		return this.state(action.id).charge?.deviceKey !== settings.deviceKey;
+		return this.state(action.id).watching !== watching(settings);
 	}
 
 	/**
@@ -240,35 +295,45 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 			await this.sendStatus(ev.action.id);
 			return;
 		}
+		const event = ev.payload?.event;
+
 		// getApps, shareAppearance and the HeadsetControl pair are answered
 		// identically by both battery actions, so they're handled once in the base
 		// class.
-		if (ev.payload?.event !== "getDevices") {
+		if (event !== "getDevices" && event !== "getBackupDevices") {
 			await super.onSendToPlugin(ev);
 			return;
 		}
 
 		const force = ev.payload?.isRefresh === true;
-		streamDeck.logger.info(`battery-status: property inspector requested devices (force=${force})`);
+		streamDeck.logger.info(`battery-status: property inspector requested ${event} (force=${force})`);
 
 		const devices = withRenames(await discovery.list(force));
 		const settings = await ev.action.getSettings();
 		const items: UiListEntry[] = groupedDevices(devices);
 
+		const [chosen, chosenLabel] =
+			event === "getDevices"
+				? [settings.deviceKey, settings.deviceLabel]
+				: [settings.backupDeviceKey, settings.backupDeviceLabel];
+
 		// Keep a previously chosen but currently absent device selectable, otherwise
 		// the dropdown would silently clear the user's configuration.
-		if (settings.deviceKey && !devices.some((d) => d.key === settings.deviceKey)) {
-			items.push({
-				label: "Not detected",
-				children: [{ label: settings.deviceLabel ?? settings.deviceKey, value: settings.deviceKey }],
-			});
+		if (chosen && !devices.some((d) => d.key === chosen)) {
+			items.push({ label: "Not detected", children: [{ label: chosenLabel ?? chosen, value: chosen }] });
+		}
+
+		if (event === "getBackupDevices") {
+			items.unshift({ label: "None", value: "" });
+			await replyToPanel({ event, items });
+			return;
 		}
 
 		if (items.length === 0) {
-			items.push({ label: "No devices detected — press the refresh button", value: "" });
+			items.push({ label: "No devices detected. Press refresh to scan again", value: "" });
 		}
 
-		await replyToPanel({ event: "getDevices", items });
+		await replyToPanel({ event, items });
 	}
 
 	/**
@@ -287,13 +352,18 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 		const settings = drawn.settings;
 		const reading = this.forPowerSource(settings, this.withLastKnown(settings, drawn.reading));
 		const age = ageLabel(this.keys.get(actionId)?.lastLiveAt ?? settings.lastSeenAt);
+		const state = reading.fromBackup
+			? "Main device off, showing backup"
+			: reading.status === "stale" && age
+				? `Disconnected, last seen ${age} ago`
+				: statusWording(reading);
 
 		await replyToPanel({
 			event: "getStatus",
 			status: {
 				label: this.label(settings, reading),
 				percent: reading.percent,
-				state: reading.status === "stale" && age ? `Disconnected — last seen ${age} ago` : statusWording(reading),
+				state,
 				tone: statusTone(reading.status),
 			},
 		});
@@ -320,6 +390,36 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 				streamDeck.logger.error("battery-status: restoring the face after a notice failed", err),
 			);
 		}, NOTICE_MS);
+	}
+
+	/**
+	 * The backup device's reading, when there is a backup and it's answering.
+	 *
+	 * Uses the scan the main device's lookup just did rather than forcing
+	 * another: on a press that scan is already fresh. Nothing is learned from
+	 * this reading about the main device's battery, so it feeds no history and
+	 * no charging guess.
+	 */
+	private async readBackup(
+		action: KeyAction<BatterySettings>,
+		settings: BatterySettings,
+	): Promise<Reading<BatterySettings> | undefined> {
+		const key = settings.backupDeviceKey;
+		if (!key || key === settings.deviceKey) return undefined;
+
+		const device = await discovery.find(key);
+		if (!device) return undefined;
+
+		const reported = device.reading ?? (await this.readDevice(device));
+		if (isOffline(reported)) return undefined;
+
+		let current = settings;
+		if (settings.backupDeviceLabel !== device.label) {
+			current = { ...settings, backupDeviceLabel: device.label };
+			await action.setSettings(current);
+		}
+
+		return { settings: current, kind: device.kind, reading: { ...reported, fromBackup: true } };
 	}
 
 	/** Maps the stored device key to a currently-detected device. */
@@ -380,7 +480,7 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 
 		if (!next.rising) return reading;
 
-		return { ...reading, status: "charging", detail: "Level rising — assumed to be charging" };
+		return { ...reading, status: "charging", detail: "Level rising, so probably charging" };
 	}
 
 	/**
@@ -391,6 +491,8 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 	 */
 	private withLastKnown(settings: BatterySettings, reading: BatteryReading): BatteryReading {
 		if (reading.percent !== null) return reading;
+		// The stored level is the main device's; it doesn't belong under a backup's name.
+		if (reading.fromBackup) return reading;
 		if (!resolved(settings).showLastKnown) return reading;
 		if (reading.status === "mains") return reading;
 
@@ -408,7 +510,7 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 			...reading,
 			percent,
 			status: "stale",
-			detail: `${reading.detail ?? reading.deviceLabel} — last known ${percent}%${age ? ` (${age} ago)` : ""}`,
+			detail: `${reading.detail ?? reading.deviceLabel}. Last known ${percent}%${age ? ` (${age} ago)` : ""}`,
 		};
 	}
 
@@ -488,7 +590,8 @@ export class BatteryStatusAction extends KeyFaceAction<BatterySettings> {
 	private deviceLine(settings: BatterySettings, reading: BatteryReading, lastLiveAt?: number): string {
 		const label = this.label(settings, reading);
 
-		if (settings.showTimeLeft && reading.status === "ok" && reading.percent !== null) {
+		// The history is the main device's, so it says nothing about a backup's.
+		if (settings.showTimeLeft && reading.status === "ok" && reading.percent !== null && !reading.fromBackup) {
 			const remaining = estimateRemaining(settings.history, reading.percent, Date.now());
 			if (remaining !== null) return formatDuration(remaining);
 

@@ -33,8 +33,12 @@ if (files.length === 0) {
 	process.exit(1);
 }
 
+// One file at a time. Importing @elgato/streamdeck opens and rotates a log file
+// under ./logs, and two test processes doing that at once race on the rename:
+// the loser fails as a whole file with nothing but "test failed" to show for
+// it, about one run in ten.
 try {
-	execFileSync(process.execPath, ["--test", ...files], { stdio: "inherit" });
+	execFileSync(process.execPath, ["--test", "--test-concurrency=1", ...files], { stdio: "inherit" });
 } catch (error) {
 	// node --test already printed the failures; propagate its status without
 	// burying them under a spawn stack trace.

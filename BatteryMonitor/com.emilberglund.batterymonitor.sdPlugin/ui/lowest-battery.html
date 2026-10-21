@@ -23,12 +23,12 @@
 	<div class="notice" id="tool-notice" hidden>
 		<div class="notice-title">HeadsetControl is required for headsets</div>
 		<div class="notice-body">
-			Without it <b>no headset can report a battery level</b>, so this key picks
-			the lowest of everything except your headsets.
+			Without it, <b>headsets can't report a battery level</b>, so this key
+			leaves your headsets out when it picks the lowest.
 			<br /><br />
-			When you run the installer, <b>remember to add it to PATH</b> — that's what
-			lets the plugin find it. If a headset still shows no level afterwards,
-			restart Stream Deck: it doesn't see a new PATH entry until it's restarted.
+			When you run the installer, <b>add it to PATH</b> so the plugin can find
+			it. If a headset still shows no level, restart Stream Deck. It picks up a
+			new PATH entry on restart.
 		</div>
 		<sdpi-button class="get-headsetcontrol">Download HeadsetControl</sdpi-button>
 	</div>
@@ -47,9 +47,9 @@
 	<details class="more">
 	<summary>About what counts</summary>
 	<div>
-		<p><b>Peripherals only</b> leaves out phones, tablets and watches. They have their own chargers and their own warnings, and counting them means the key spends its time reporting a phone instead of the headset that's about to go quiet mid-call.</p>
-		<p>Only live readings count. A device that's switched off can't win with the level it had yesterday, and a mains-powered one has nothing to compare.</p>
-		<p>No extra scanning happens for this: every device's level is already collected, so this only chooses between readings that exist.</p>
+		<p><b>Peripherals only</b> leaves out phones, tablets and watches. They have their own chargers and warnings. Count them and the key ends up showing your phone while your headset dies mid-call.</p>
+		<p>The key compares live readings. A switched-off device can't win with yesterday's level, and a mains-powered one has no level to compare.</p>
+		<p>This key adds no scanning. The plugin already collects every level, and the key picks from those.</p>
 	</div>
 	</details>
 
@@ -78,7 +78,7 @@
 			datasource="getApps"
 			show-refresh
 			hot-reload
-			placeholder="Reading the Start menu…"
+			placeholder="Don't open anything"
 			loading="Reading the Start menu…"
 		></sdpi-select>
 	</sdpi-item>
@@ -114,10 +114,9 @@
 	</sdpi-item>
 
 	<span class="hint">
-		Keep "which device" on: a low number tells you something needs charging, but
-		not what. The key carries a chevron in the corner so it reads as the pile's
-		lowest rather than one device's own level, and gains a coloured frame once
-		that device is under the low threshold.
+		Keep "which device" on, so a low number also tells you what to charge. A
+		chevron in the corner marks this key as the lowest of several devices. Once
+		that device drops under the low threshold, the key gets a coloured frame.
 	</span>
 
 	<div class="section">Levels</div>
@@ -164,11 +163,11 @@
 		</div>
 	</sdpi-item>
 
-	<sdpi-item label="">
+	<sdpi-item>
 		<sdpi-button id="share-appearance">Apply this look to all keys</sdpi-button>
 	</sdpi-item>
 
-	<span class="hint">Copies the colours, thresholds and what's drawn to every other Battery Monitor key.</span>
+	<span class="hint">Copies colours, thresholds and face options to every other Battery Monitor key.</span>
 
 	<!--
 		Where HeadsetControl lives once it's installed and the banner at the top has
@@ -183,17 +182,16 @@
 	<div id="tool-missing" hidden>
 		<span class="hint">
 			Not installed. Headsets can't report a level without it, so this key can't
-			pick one as the lowest. The download is in the warning at the top of this
-			panel.
+			pick one as the lowest. The download link is in the warning at the top.
 		</span>
 	</div>
 
 	<div id="tool-installed" hidden>
-		<span class="hint" id="tool-path">Installed — headsets report their level.</span>
+		<span class="hint" id="tool-path">Installed. Headsets report their level.</span>
 		<details class="more">
 		<summary>Want to re-install?</summary>
 		<div>
-			<p>Worth doing if a headset stopped reporting after an update, or if yours is newer than your copy of the tool.</p>
+			<p>Try it if a headset stopped reporting after an update, or if your headset is newer than your copy of the tool.</p>
 			<sdpi-button class="get-headsetcontrol">Open the releases page</sdpi-button>
 		</div>
 		</details>
@@ -256,7 +254,7 @@
 				toolMissing.hidden = installed;
 				toolInstalled.hidden = !installed;
 				if (installed) {
-					toolPath.textContent = `Installed — headsets report their level. Using ${binary}.`;
+					toolPath.textContent = `Installed. Headsets report their level. Using ${binary}.`;
 				}
 				return;
 			}

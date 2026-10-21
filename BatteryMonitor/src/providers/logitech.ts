@@ -156,7 +156,7 @@ export class LogitechProvider implements BatteryProvider {
 				deviceLabel: device.label,
 				percent: null,
 				status: "not-found",
-				detail: "No answer after two tries — powered off or out of range",
+				detail: "No answer after two tries. Powered off or out of range",
 			}
 		);
 	}
@@ -475,7 +475,7 @@ async function readBattery(
 		deviceLabel: label,
 		percent: null,
 		status: "not-found",
-		detail: "No answer after two tries — powered off or out of range",
+		detail: "No answer after two tries. Powered off or out of range",
 	};
 }
 

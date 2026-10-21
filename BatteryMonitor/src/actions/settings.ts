@@ -21,6 +21,13 @@ export type BatterySettings = {
 	/** Last known label/kind, so a disconnected device still renders sensibly. */
 	deviceLabel?: string;
 	deviceKind?: DeviceKind;
+	/**
+	 * A second device the key shows while the first is off or missing: a wired
+	 * keyboard behind a wireless one, say. Its label is kept for the picker,
+	 * the same way {@link deviceLabel} is, so it still has a name while absent.
+	 */
+	backupDeviceKey?: string;
+	backupDeviceLabel?: string;
 	/** Overrides the name the device reports: Windows calls one phone here "4". */
 	displayName?: string;
 	/** Overrides the drawn form factor; "auto" believes the provider. */
@@ -72,6 +79,14 @@ export type BatterySettings = {
 	colorForeground?: string;
 	/** Flash the key's alert icon below this percentage; 0 disables. */
 	alertBelow?: number;
+
+	/**
+	 * Which "apply to all keys" this key last adopted, matching
+	 * {@link GlobalSettings.appearanceRev}. A key whose revision differs has a
+	 * newer shared look waiting for it; one that matches has already taken it, so
+	 * any change made to it since is its own and must not be overwritten.
+	 */
+	appearanceRev?: number;
 
 	/** Set once the defaults below have been written out, so the PI shows them. */
 	configured?: boolean;
@@ -178,6 +193,13 @@ export type Appearance = Pick<BatterySettings, (typeof APPEARANCE_KEYS)[number]>
 /** Settings shared by every key of this plugin. */
 export type GlobalSettings = {
 	appearance?: Appearance;
+	/**
+	 * Bumped every time a look is shared. Keys compare it against their own
+	 * {@link BatterySettings.appearanceRev} to tell a new share from one they
+	 * already took. Absent on looks shared before it existed, which no key has
+	 * a revision for, so those are only applied to new keys.
+	 */
+	appearanceRev?: number;
 	/** Device key -> the name the user gave it; see actions/renames.ts. */
 	renames?: Record<string, string>;
 };

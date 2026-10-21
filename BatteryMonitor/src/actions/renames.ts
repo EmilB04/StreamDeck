@@ -1,5 +1,6 @@
 import streamDeck from "@elgato/streamdeck";
 import type { DiscoveredDevice } from "../providers/types";
+import { cacheGlobal } from "./appearance";
 import type { GlobalSettings } from "./settings";
 
 /**
@@ -48,8 +49,10 @@ export async function setRename(deviceKey: string, name: string): Promise<Rename
 	if (trimmed === "") delete next[deviceKey];
 	else next[deviceKey] = trimmed;
 
-	await streamDeck.settings.setGlobalSettings<GlobalSettings>({ ...global, renames: next });
+	const written: GlobalSettings = { ...global, renames: next };
+	await streamDeck.settings.setGlobalSettings<GlobalSettings>(written);
 	cacheRenames(next);
+	cacheGlobal(written);
 	return next;
 }
 

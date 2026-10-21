@@ -1,9 +1,9 @@
 import { action } from "@elgato/streamdeck";
 import type { KeyAction, SendToPluginEvent } from "@elgato/streamdeck";
 import { discovery } from "../providers/discovery";
-import type { BatteryReading, DiscoveredDevice } from "../providers/types";
+import type { BatteryReading, DeviceKind, DiscoveredDevice } from "../providers/types";
 import type { Face, Reading } from "./key-face";
-import { KeyFaceAction } from "./key-face";
+import { KeyFaceAction, PREVIEW_MAX_AGE_MS } from "./key-face";
 import { withRenames } from "./renames";
 import type { LowestBatterySettings } from "./settings";
 import { DEFAULTS, resolved, watchIncludes } from "./settings";
@@ -46,6 +46,13 @@ export class LowestBatteryAction extends KeyFaceAction<LowestBatterySettings> {
 		return { settings, reading: lowest.reading, kind: lowest.device.kind };
 	}
 
+	/** Picks from the last scan, if there's a recent one, while the real read runs. */
+	protected override preview(settings: LowestBatterySettings): Reading<LowestBatterySettings> | undefined {
+		const devices = discovery.peek(PREVIEW_MAX_AGE_MS);
+		const lowest = devices && pickLowest(withRenames(devices), settings);
+		return lowest ? { settings, reading: lowest.reading, kind: lowest.device.kind } : undefined;
+	}
+
 	/**
 	 * The name is the point here: a number without the device it belongs to tells
 	 * you something is low but not what to go and charge.
@@ -54,7 +61,7 @@ export class LowestBatteryAction extends KeyFaceAction<LowestBatterySettings> {
 		_action: KeyAction<LowestBatterySettings>,
 		settings: LowestBatterySettings,
 		live: BatteryReading,
-		kind: import("../providers/types").DeviceKind,
+		kind: DeviceKind,
 	): Face {
 		const showName = resolved(settings).showName;
 		return { reading: live, kind, name: showName ? live.deviceLabel : "", lowest: true };
@@ -79,7 +86,7 @@ export class LowestBatteryAction extends KeyFaceAction<LowestBatterySettings> {
 					? {
 							label: drawn.reading.deviceLabel,
 							percent: drawn.reading.percent,
-							state: drawn.reading.status === "charging" ? "Charging — lowest of the lot" : "Lowest right now",
+							state: drawn.reading.status === "charging" ? "Charging, and still the lowest" : "Lowest right now",
 							tone: drawn.reading.percent === null ? "offline" : "ok",
 						}
 					: null,

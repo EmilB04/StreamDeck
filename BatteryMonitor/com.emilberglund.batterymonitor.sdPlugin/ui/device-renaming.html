@@ -22,7 +22,7 @@
 			datasource="getDevices"
 			show-refresh
 			hot-reload
-			placeholder="Scanning…"
+			placeholder="Pick a device"
 			loading="Scanning…"
 		></sdpi-select>
 	</sdpi-item>
@@ -32,24 +32,24 @@
 	</sdpi-item>
 
 	<span class="hint">
-		Applies everywhere in this plugin at once — every key, both other actions
-		and the device pickers. Nothing outside the plugin changes.
+		A new name shows up on every key, in both other actions and in the device
+		pickers. Nothing outside the plugin changes.
 	</span>
 
 	<div class="section">In force</div>
 
 	<div class="hint" id="rename-list">No devices have been renamed.</div>
 
-	<sdpi-item label="">
+	<sdpi-item>
 		<sdpi-button id="clear-renames">Clear every name</sdpi-button>
 	</sdpi-item>
 
 	<details class="more">
 	<summary>About renaming</summary>
 	<div>
-		<p>Names come from the operating system or from the device's own descriptor, and some of them are useless — Windows reports one phone here as <b>4</b>, and unbranded Bluetooth gear often arrives as "Bluetooth device". Where that name can't be fixed at the source, fix it here.</p>
-		<p>A key's <b>Nickname</b> does the same thing for one key and takes priority over this. Use a rename when the device should be called the same thing everywhere, and a nickname when one key wants its own wording.</p>
-		<p>Names are matched to the device's stable key, not its position in the list, so they survive reconnects, reboots and the device being switched off.</p>
+		<p>Names come from Windows or from the device itself, and some say nothing useful. Windows calls one of my phones <b>4</b>, and unbranded Bluetooth gear often shows up as "Bluetooth device". Fix those here.</p>
+		<p>A key's <b>Nickname</b> does the same for one key and wins over a rename. Rename a device to change its name everywhere. Use a nickname when one key needs its own wording.</p>
+		<p>The plugin stores each name against the device's ID, so the name survives reconnects, reboots and the device being switched off.</p>
 	</div>
 	</details>
 

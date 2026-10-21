@@ -158,6 +158,6 @@ export function decodeBattery(flags: number, label: string): BatteryReading {
 		deviceLabel: label,
 		percent: step.percent,
 		status: (flags & CHARGING) !== 0 ? "charging" : "ok",
-		detail: `${step.word} — the pad reports four steps, not a percentage`,
+		detail: `${step.word}. The pad reports four steps rather than a percentage`,
 	};
 }

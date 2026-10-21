@@ -4,6 +4,7 @@ import type { KeyAction } from "@elgato/streamdeck";
 import type { Face, Reading } from "../src/actions/key-face";
 import { KeyFaceAction } from "../src/actions/key-face";
 import type { BatterySettings } from "../src/actions/settings";
+import { SETTINGS_VERSION } from "../src/actions/settings";
 import type { BatteryReading, DeviceKind } from "../src/providers/types";
 
 const reading = (percent: number | null, status: BatteryReading["status"] = "ok"): BatteryReading => ({
@@ -61,41 +62,102 @@ class TestKey extends KeyFaceAction<BatterySettings> {
 	peek(id: string) {
 		return this.state(id);
 	}
-	count() {
-		return this.keys.size;
-	}
 	async run(action: KeyAction<BatterySettings>, settings: BatterySettings, force = false) {
 		await this.refresh(action, settings, force);
 	}
 	arm(action: KeyAction<BatterySettings>, settings: BatterySettings) {
 		this.schedule(action, settings);
 	}
+	/** Clears the timers a test armed, so they can't hold the process open. */
+	dispose(id: string) {
+		const state = this.keys.get(id);
+		clearTimeout(state?.pollTimer);
+		clearInterval(state?.pulseTimer);
+	}
 }
 
-describe("a key's state, and letting go of it", () => {
-	it("forgets everything about a key that disappears", () => {
-		// The leak this guards: per-key bookkeeping used to live in maps the
-		// subclass never cleaned, so every key ever shown stayed in memory.
+describe("a key's state across leaving the screen", () => {
+	it("keeps what it last drew when it disappears, so a folder reopens instantly", async () => {
+		// Dropping everything here is what made every folder open start blank and
+		// wait out a full scan.
 		const key = new TestKey();
 		const { action } = fakeAction();
 
-		key.peek(action.id).unchanged = 5;
-		assert.equal(key.count(), 1);
-
+		await key.run(action, {});
 		key.onWillDisappear({ action } as never);
-		assert.equal(key.count(), 0, "no state left behind for a key that's gone");
+
+		assert.equal(key.peek(action.id).drawn?.reading.percent, 80);
+		assert.ok(key.peek(action.id).hiddenAt !== undefined, "marked as off screen");
 	});
 
-	it("clears the timers it armed, so nothing fires for a vanished key", () => {
+	it("repaints from memory the moment it reappears, before reading again", async () => {
+		const key = new TestKey();
+		const { action, calls } = fakeAction();
+
+		await key.run(action, {});
+		key.onWillDisappear({ action } as never);
+		const reads = key.readsSeen;
+		calls.images.length = 0;
+
+		// Already migrated, so appearing doesn't go to Stream Deck for defaults.
+		const settings = { configured: true, settingsVersion: SETTINGS_VERSION };
+		await key.onWillAppear({ action, payload: { settings } } as never);
+		key.onWillDisappear({ action } as never);
+
+		assert.ok(calls.images.length >= 1, "painted on appearing");
+		assert.equal(key.readsSeen, reads, "a read moments ago isn't repeated");
+		key.dispose(action.id);
+	});
+
+	it("reads in the background while hidden, but paints nothing", async () => {
+		const key = new TestKey();
+		const { action, calls } = fakeAction();
+
+		await key.run(action, {});
+		key.onWillDisappear({ action } as never);
+		calls.images.length = 0;
+
+		key.next = reading(40);
+		await key.run(action, {});
+
+		assert.equal(calls.images.length, 0, "nothing to paint on");
+		assert.equal(key.peek(action.id).drawn?.reading.percent, 40, "but the reading is kept for later");
+	});
+
+	it("doesn't spend the low warning while nobody can see it", async () => {
+		const key = new TestKey();
+		const { action, calls } = fakeAction();
+
+		key.onWillDisappear({ action } as never);
+		key.peek(action.id).hiddenAt = Date.now();
+		key.next = reading(10);
+		await key.run(action, { alertBelow: 20 });
+		assert.equal(calls.alerts, 0);
+
+		key.peek(action.id).hiddenAt = undefined;
+		await key.run(action, { alertBelow: 20 });
+		assert.equal(calls.alerts, 1, "flashes once it's back on screen");
+	});
+
+	it("stops polling once it has been hidden past the background window", () => {
+		const key = new TestKey();
+		const { action } = fakeAction();
+
+		key.peek(action.id).hiddenAt = Date.now() - 24 * 60 * 60_000;
+		key.arm(action, { refreshSeconds: 3600 });
+		assert.equal(key.peek(action.id).pollTimer, undefined);
+	});
+
+	it("keeps one poll chain per key, however often it's re-armed", () => {
 		const key = new TestKey();
 		const { action } = fakeAction();
 
 		key.arm(action, { refreshSeconds: 3600 });
-		assert.ok(key.peek(action.id).pollTimer, "a poll is pending");
+		const first = key.peek(action.id).pollTimer;
+		key.arm(action, { refreshSeconds: 3600 });
 
-		key.onWillDisappear({ action } as never);
-		// An orphaned timer would keep the process alive and paint a dead key.
-		assert.equal(key.count(), 0);
+		assert.notEqual(key.peek(action.id).pollTimer, first, "the earlier timer was replaced");
+		key.dispose(action.id);
 	});
 
 	it("hands the same record back for the same key", () => {

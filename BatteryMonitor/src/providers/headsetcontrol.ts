@@ -79,7 +79,7 @@ export async function findHeadsetControl(): Promise<string | null> {
 		}
 	}
 
-	log.info(`headsetcontrol: not found — tried ${attempts.join(", ")}`);
+	log.info(`headsetcontrol: not found, tried ${attempts.join(", ")}`);
 	return null;
 }
 
@@ -241,7 +241,7 @@ export function toReading(label: string, raw: any): BatteryReading | undefined {
 	const reported = text(raw.errors?.battery);
 	const offline = reported
 		? `Headset offline: ${reported}`
-		: "Headset offline or asleep — the dongle is connected but the headset isn't answering";
+		: "Headset offline or asleep. The dongle is connected but the headset doesn't answer";
 
 	const status: string = String(battery.status ?? "");
 	if (status === "BATTERY_UNAVAILABLE" || status === "BATTERY_TIMEOUT" || status === "BATTERY_HIDERROR") {

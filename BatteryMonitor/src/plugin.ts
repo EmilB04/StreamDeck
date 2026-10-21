@@ -3,6 +3,7 @@ import { BatteryStatusAction } from "./actions/battery-status";
 import { DeviceRenamingAction } from "./actions/device-renaming";
 import { LowestBatteryAction } from "./actions/lowest-battery";
 import type { GlobalSettings } from "./actions/settings";
+import { cacheGlobal, whenShared } from "./actions/appearance";
 import { cacheRenames, loadRenames } from "./actions/renames";
 import { setLogger } from "./providers/log";
 
@@ -18,18 +19,24 @@ streamDeck.actions.registerAction(lowestBattery);
 streamDeck.actions.registerAction(deviceRenaming);
 
 // "Apply to all keys" writes the look to global settings; this is the single
-// place that spreads it, so both action types adopt it the same way.
-streamDeck.settings.onDidReceiveGlobalSettings<GlobalSettings>((ev) => {
-	// Renames live here too, and every label resolution reads them from cache.
-	cacheRenames(ev.settings?.renames);
-
-	const appearance = ev.settings?.appearance;
-	if (!appearance) return;
-
-	Promise.all([batteryStatus.applyShared(appearance), lowestBattery.applyShared(appearance)]).catch((err) =>
+// place that spreads it, so both action types adopt it the same way. Every key
+// compares revisions, so running this more often than needed changes nothing.
+const spreadSharedLook = (): void => {
+	Promise.all([batteryStatus.applyShared(), lowestBattery.applyShared()]).catch((err) =>
 		streamDeck.logger.error("plugin: applying the shared appearance failed", err),
 	);
+};
+
+// Fires for every read of global settings as well as for panel edits, which is
+// why it must not reapply anything on its own (see appearance.ts).
+streamDeck.settings.onDidReceiveGlobalSettings<GlobalSettings>((ev) => {
+	cacheGlobal(ev.settings);
+	// Renames live here too, and every label resolution reads them from cache.
+	cacheRenames(ev.settings?.renames);
+	spreadSharedLook();
 });
+
+whenShared(spreadSharedLook);
 
 // Only after connecting: getGlobalSettings is a request to Stream Deck, and
 // issuing one before the socket exists leaves every later request queued behind

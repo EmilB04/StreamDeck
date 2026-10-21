@@ -2,9 +2,9 @@
 	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
 	"Name": "Battery Monitor",
 	"UUID": "com.emilberglund.batterymonitor",
-	"Version": "1.1.0.0",
+	"Version": "1.2.0.0",
 	"Author": "Emil Berglund",
-	"Description": "Shows the battery level of your wireless devices on a key. Finds headsets, mice, keyboards, controllers and Bluetooth devices automatically, warns you when one runs low, and can watch whichever device is emptiest.",
+	"Description": "Shows the battery level of your wireless devices on a key. Finds your headsets, mice, keyboards, controllers and Bluetooth devices, warns you when one runs low, and can watch whichever device is emptiest.",
 	"Icon": "imgs/plugin/marketplace",
 	"CategoryIcon": "imgs/plugin/category-icon",
 	"Category": "Battery Monitor",
@@ -28,7 +28,7 @@
 			"Name": "Device Battery",
 			"UUID": "com.emilberglund.batterymonitor.battery-status",
 			"Icon": "imgs/actions/battery-status/icon",
-			"Tooltip": "Shows the battery level of a wireless device detected on this computer.",
+			"Tooltip": "Shows the battery level of a wireless device on this computer, with an optional backup device.",
 			"PropertyInspectorPath": "ui/battery-status.html",
 			"Controllers": [
 				"Keypad"
@@ -64,7 +64,7 @@
 			"Name": "Device Renaming",
 			"UUID": "com.emilberglund.batterymonitor.device-renaming",
 			"Icon": "imgs/actions/device-renaming/icon",
-			"Tooltip": "Rename detected devices for this plugin — every key follows.",
+			"Tooltip": "Rename detected devices for this plugin. Every key follows the new name.",
 			"PropertyInspectorPath": "ui/device-renaming.html",
 			"Controllers": [
 				"Keypad"

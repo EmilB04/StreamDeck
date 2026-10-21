@@ -39,6 +39,11 @@ export interface BatteryReading {
 	percent: number | null;
 	status: BatteryStatus;
 	detail?: string;
+	/**
+	 * Set by a key, never by a provider: this reading is from the key's backup
+	 * device, standing in while its main device is offline.
+	 */
+	fromBackup?: boolean;
 }
 
 /**

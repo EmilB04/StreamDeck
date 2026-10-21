@@ -14,7 +14,14 @@ import streamDeck from "@elgato/streamdeck";
 
 /** Everything a panel can ask for. */
 export type UiEvent =
-	"getStatus" | "getApps" | "getDevices" | "getHeadsetTool" | "openHeadsetTool" | "shareAppearance" | "clearRenames";
+	| "getStatus"
+	| "getApps"
+	| "getDevices"
+	| "getBackupDevices"
+	| "getHeadsetTool"
+	| "openHeadsetTool"
+	| "shareAppearance"
+	| "clearRenames";
 
 /**
  * What arrives from a panel. `event` stays optional because the payload is
@@ -60,6 +67,7 @@ export type UiReply =
 	| { event: "getStatus"; status: UiStatus | null }
 	| { event: "getApps"; items: UiItem[] }
 	| { event: "getDevices"; items: UiListEntry[]; renames?: Record<string, string> }
+	| { event: "getBackupDevices"; items: UiListEntry[] }
 	| { event: "getHeadsetTool"; installed: boolean; binary: string | null };
 
 /**

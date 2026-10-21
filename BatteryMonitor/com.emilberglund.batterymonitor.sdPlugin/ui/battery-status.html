@@ -23,12 +23,12 @@
 	<div class="notice" id="tool-notice" hidden>
 		<div class="notice-title">HeadsetControl is required for headsets</div>
 		<div class="notice-body">
-			Without it <b>no headset can report a battery level</b> — they're listed
-			under "No battery data". Every other kind of device works without it.
+			Without it, <b>headsets can't report a battery level</b> and show up
+			under "No battery data". Other devices work without it.
 			<br /><br />
-			When you run the installer, <b>remember to add it to PATH</b> — that's what
-			lets the plugin find it. If a headset still shows no level afterwards,
-			restart Stream Deck: it doesn't see a new PATH entry until it's restarted.
+			When you run the installer, <b>add it to PATH</b> so the plugin can find
+			it. If a headset still shows no level, restart Stream Deck. It picks up a
+			new PATH entry on restart.
 		</div>
 		<sdpi-button class="get-headsetcontrol">Download HeadsetControl</sdpi-button>
 	</div>
@@ -48,7 +48,18 @@
 			datasource="getDevices"
 			show-refresh
 			hot-reload
-			placeholder="Scanning…"
+			placeholder="Pick a device"
+			loading="Scanning…"
+		></sdpi-select>
+	</sdpi-item>
+
+	<sdpi-item label="Backup">
+		<sdpi-select
+			setting="backupDeviceKey"
+			datasource="getBackupDevices"
+			show-refresh
+			hot-reload
+			placeholder="None"
 			loading="Scanning…"
 		></sdpi-select>
 	</sdpi-item>
@@ -84,9 +95,10 @@
 	<details class="more">
 	<summary>About the device list</summary>
 	<div>
-		<p>Refresh rescans, which takes about 3 seconds — use it after switching a device on.</p>
-		<p><b>No battery data</b> means the device was found but reports no level. <b>Mains powered</b> means it runs off its cable.</p>
-		<p>Set <b>Power</b> to "always plugged in" for anything wired that the plugin can't work out for itself, like a speaker. The key then draws a plug instead of a level.</p>
+		<p>Refresh rescans. A scan takes about 3 seconds, so use it after you switch a device on.</p>
+		<p>The key shows the <b>Backup</b> device while the main one is off or missing, and switches back when the main one returns. Pair a wireless keyboard with your wired one: you see the wireless battery while it's on and the wired keyboard while it's off.</p>
+		<p><b>No battery data</b>: the plugin found the device, but it reports no level. <b>Mains powered</b>: it runs off its cable.</p>
+		<p>Set <b>Power</b> to "always plugged in" for wired gear the plugin can't identify, like a speaker. The key then draws a plug.</p>
 	</div>
 	</details>
 
@@ -110,8 +122,8 @@
 	<details class="more">
 	<summary>About checking</summary>
 	<div>
-		<p>Every check spawns helper processes and opens the device, so the interval is a real cost. Pressing the key always reads immediately.</p>
-		<p><b>Adapt</b> spends checks where they matter: 15 sec while charging, 30 sec when low, backing off to 10 min while the level holds and 2 min while the device is off. It never goes slower than your interval when charging or low, and any change snaps it back.</p>
+		<p>Each check starts helper processes and opens the device, so a short interval costs CPU. A press reads the device straight away.</p>
+		<p><b>Adapt</b> checks every 15 sec while charging and every 30 sec when low. While the level holds it backs off to 10 min, and to 2 min while the device is off. Charging or low never slows below your interval, and a change in level resets the backoff.</p>
 	</div>
 	</details>
 
@@ -123,7 +135,7 @@
 			datasource="getApps"
 			show-refresh
 			hot-reload
-			placeholder="Reading the Start menu…"
+			placeholder="Don't open anything"
 			loading="Reading the Start menu…"
 		></sdpi-select>
 	</sdpi-item>
@@ -132,7 +144,7 @@
 		<sdpi-textfield setting="pressCustomTarget" placeholder="C:\…\app.exe, or steam://"></sdpi-textfield>
 	</sdpi-item>
 
-	<span class="hint">A path here wins over the list. A press warns on the key if the device is disconnected.</span>
+	<span class="hint">A path here wins over the list. If the device is disconnected, a press shows a warning on the key.</span>
 
 	<div class="section">Key face</div>
 
@@ -164,11 +176,11 @@
 	<details class="more">
 	<summary>About names and offline keys</summary>
 	<div>
-		<p>Stream Deck's own Title field is switched off for this action, so <b>Nickname</b> is the only place a key is named. <b>Deck title</b> writes Stream Deck's title over the image as well, in its font rather than the key's — set it to <b>Nickname</b> and it follows the name above, falling back to the device's own when that's empty.</p>
-		<p><b>Last level when off</b> keeps showing what a disconnected device last reported, faded and marked with a crossed-out circle. Turn it off for a dash instead.</p>
-		<p><b>How long since it was seen</b> puts the age in front of the name — "10h · DualSense". On a narrow face, like the ring, that can leave no room for the name itself; turn it off and the crossed-out circle alone says the reading isn't live.</p>
-		<p><b>Time left</b> puts an estimate on the name line instead of the device name — there's room for one of them.</p>
-		<p>It reads <b>measuring…</b> until the device has actually dropped 3% over at least ten minutes: a rate needs a real fall to measure, and a device that reports in 10% steps can take a while to produce one. It goes back to measuring after a charge, since a discharge rate can't be read across one.</p>
+		<p>This action hides Stream Deck's own Title field, so you name the key with <b>Nickname</b>. <b>Deck title</b> also writes Stream Deck's title over the image, in Stream Deck's font. Set it to <b>Nickname</b> to show the name above, or the device's own name when Nickname is empty.</p>
+		<p><b>Last level when off</b> keeps the last level a disconnected device reported, faded, with a crossed-out circle. Turn it off to show a dash.</p>
+		<p><b>How long since it was seen</b> puts the age before the name, as in "10h · DualSense". On a narrow face like the ring, the age can push the name off the key. Turn it off and the crossed-out circle still marks the level as old.</p>
+		<p><b>Time left</b> replaces the device name with an estimate. The name line fits one or the other.</p>
+		<p>It reads <b>measuring…</b> until the level drops 3% over at least ten minutes. Devices that report in 10% steps can take a while to get there. After a charge it starts measuring again, because a discharge rate can't span a charge.</p>
 	</div>
 	</details>
 
@@ -198,7 +210,7 @@
 		<span class="value" data-for="alertBelow"></span>
 	</sdpi-item>
 
-	<span class="hint">Above the medium threshold the meter uses the high colour. The warning flashes Stream Deck's alert icon while a live reading is under it.</span>
+	<span class="hint">Above the medium threshold the meter uses the high colour. When a live level drops under "Warn below", Stream Deck flashes its alert icon once.</span>
 
 	<div class="section">Colours</div>
 
@@ -218,11 +230,11 @@
 		</div>
 	</sdpi-item>
 
-	<sdpi-item label="">
+	<sdpi-item>
 		<sdpi-button id="share-appearance">Apply this look to all keys</sdpi-button>
 	</sdpi-item>
 
-	<span class="hint">Copies the colours, thresholds and what's drawn to every other Battery Monitor key. Each key keeps its own device.</span>
+	<span class="hint">Copies colours, thresholds and face options to every other Battery Monitor key. Each key keeps its own device.</span>
 
 	<div class="section">Headset support</div>
 
@@ -235,19 +247,18 @@
 	-->
 	<div id="tool-missing" hidden>
 		<span class="hint">
-			Not installed. Headsets can't report a level without it; every other kind
-			of device is unaffected. The download is in the warning at the top of this
-			panel.
+			Not installed. Headsets can't report a level without it. Other devices
+			work as normal. The download link is in the warning at the top.
 		</span>
 	</div>
 
 	<!-- Installed: nothing to do, so the download folds away. -->
 	<div id="tool-installed" hidden>
-		<span class="hint" id="tool-path">Installed — headsets report their level.</span>
+		<span class="hint" id="tool-path">Installed. Headsets report their level.</span>
 		<details class="more">
 		<summary>Want to re-install?</summary>
 		<div>
-			<p>Worth doing if a headset stopped reporting after an update, or if yours is newer than your copy of the tool.</p>
+			<p>Try it if a headset stopped reporting after an update, or if your headset is newer than your copy of the tool.</p>
 			<sdpi-button class="get-headsetcontrol">Open the releases page</sdpi-button>
 		</div>
 		</details>
@@ -260,30 +271,30 @@
 	<div>
 		<dl class="devices">
 			<dt>Headsets</dt>
-			<dd>HyperX, SteelSeries, Corsair, Logitech, Razer, Turtle Beach, Roccat, Astro — around 100 models. Needs <b>HeadsetControl</b> installed and on your PATH; without it, no headset reports a level.</dd>
+			<dd>HyperX, SteelSeries, Corsair, Logitech, Razer, Turtle Beach, Roccat and Astro, around 100 models. Needs <b>HeadsetControl</b> installed and on your PATH.</dd>
 
 			<dt>Mice &amp; keyboards</dt>
 			<dd>Logitech, over its own receivers or paired directly. Asus ROG. Razer&nbsp;<span class="tag">new</span></dd>
 
 			<dt>Controllers</dt>
-			<dd>PlayStation: DualSense, DualSense Edge, DualShock 4&nbsp;<span class="tag">new</span> — over USB or Bluetooth. Xbox&nbsp;<span class="tag">new</span> — Bluetooth only, and in four steps rather than a percentage.</dd>
+			<dd>PlayStation: DualSense, DualSense Edge and DualShock 4&nbsp;<span class="tag">new</span>, over USB or Bluetooth. Xbox&nbsp;<span class="tag">new</span>: Bluetooth only, in four steps rather than a percentage.</dd>
 
 			<dt>Bluetooth LE</dt>
-			<dd>Phones, watches, styluses, and anything else that publishes a battery service — Windows reads it, so no brand list applies.</dd>
+			<dd>Phones, watches, styluses and anything else that publishes a battery service. Windows reads the level, so brand doesn't matter.</dd>
 
 			<dt>Everything else</dt>
 			<dd>Still listed, without a level. Cable-powered devices show a plug instead.</dd>
 		</dl>
-		<p><b>Not covered:</b> SteelSeries, Corsair and Roccat mice and keyboards — each model speaks its own protocol. Xbox pads through the wireless dongle or a cable. Nintendo pads. AirPods, which report over Apple's own protocol rather than Bluetooth's.</p>
-		<p>Entries marked <span class="tag">new</span> were written from published protocol documentation but haven't been tried on the hardware yet.</p>
+		<p><b>Not covered:</b> SteelSeries, Corsair and Roccat mice and keyboards, where each model speaks its own protocol. Xbox pads on the wireless dongle or a cable. Nintendo pads. AirPods, which use Apple's own protocol.</p>
+		<p>I wrote the entries marked <span class="tag">new</span> from published protocol documentation and haven't tested them on hardware yet.</p>
 	</div>
 	</details>
 
 	<details class="more">
 	<summary>How devices are found</summary>
 	<div>
-		<p>Nothing is hard-coded per model: the plugin enumerates what this machine can see, so the list is whatever is plugged in or paired right now. A device released tomorrow works if it speaks a protocol above.</p>
-		<p>Bluetooth LE devices report a level and nothing else, so for those the bolt appears once the level is seen rising. Wireless levels are coarse — many report in steps of 10% — so expect the number to jump.</p>
+		<p>The plugin has no model list. It lists what this machine can see, so you get whatever is plugged in or paired right now. A device released tomorrow works if it speaks one of the protocols above.</p>
+		<p>Bluetooth LE devices report a level and nothing else, so the bolt appears once the level rises. Many wireless devices report in 10% steps, so expect the number to jump.</p>
 	</div>
 	</details>
 
@@ -382,7 +393,7 @@
 			toolNotice.hidden = installed;
 
 			if (installed) {
-				toolPath.textContent = `Installed — headsets report their level. Using ${binary}.`;
+				toolPath.textContent = `Installed. Headsets report their level. Using ${binary}.`;
 			}
 		});
 

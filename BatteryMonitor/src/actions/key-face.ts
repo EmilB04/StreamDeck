@@ -10,11 +10,11 @@ import type {
 import { findHeadsetControl, HEADSETCONTROL_RELEASES } from "../providers/headsetcontrol";
 import type { BatteryReading, DeviceKind } from "../providers/types";
 import { batteryKeyImage } from "../ui/battery-svg";
-import { applyAppearance, shareAppearance, sharedAppearance } from "./appearance";
+import { pendingAppearance, shareAppearance, sharedAppearance } from "./appearance";
 import { listApps } from "./apps";
 import { openTarget } from "./launch";
 import type { ChargeGuess } from "./charging";
-import type { Appearance, BatterySettings, PollMode } from "./settings";
+import type { BatterySettings, PollMode } from "./settings";
 import { extractAppearance, faceColors, migrate, nextPollSeconds, refreshSeconds, resolved } from "./settings";
 import type { UiMessage } from "./ui-messages";
 import { replyToPanel } from "./ui-messages";
@@ -22,6 +22,29 @@ import { replyToPanel } from "./ui-messages";
 /** Charging pulse: 8 steps of 450ms, i.e. a slow ~3.6s breath. */
 const PULSE_INTERVAL_MS = 450;
 const PULSE_STEPS = 8;
+
+/**
+ * A key that isn't on screen (in a closed folder, or on another page) keeps
+ * reading in the background, so it comes back showing a current level instead
+ * of the manifest's placeholder for the length of a scan. Nobody is looking at
+ * it, so it reads no more often than this...
+ */
+const BACKGROUND_MIN_SECONDS = 60;
+
+/**
+ * ...and only for this long. Stream Deck says the same thing for a key that was
+ * deleted as for one in a closed folder, so polling forever would keep scanning
+ * for keys that no longer exist. Past this a hidden key goes quiet, still
+ * remembering its last face, and reads again as soon as it's shown.
+ */
+const BACKGROUND_WINDOW_MS = 30 * 60_000;
+
+/**
+ * How old a scan may be and still paint a key that's appearing for the first
+ * time (see {@link KeyFaceAction.preview}). Covers a folder opened a few minutes
+ * after the last poll anywhere else; the real read replaces it seconds later.
+ */
+export const PREVIEW_MAX_AGE_MS = 5 * 60_000;
 
 /** What a subclass hands back from a read. */
 export type Reading<TSettings> = {
@@ -70,6 +93,19 @@ export type KeyState<TSettings> = {
 	titleApplied?: { value: string | undefined };
 	/** When a live reading last arrived, to the second. */
 	lastLiveAt?: number;
+	/**
+	 * When the key left the screen; undefined while it's visible. A hidden key
+	 * keeps its state and its poll chain (see {@link BACKGROUND_WINDOW_MS}) but
+	 * paints nothing and raises no alerts.
+	 */
+	hiddenAt?: number;
+	/**
+	 * What the key was pointed at when it last read, so an edit that re-points
+	 * it can be told apart from one that only changes how it looks.
+	 */
+	watching?: string;
+	/** When the last read finished, to tell whether a reappearing key is due one. */
+	readAt?: number;
 	/** A message owns the key; painting is suspended until it clears. */
 	showingNotice?: boolean;
 	noticeTimer?: NodeJS.Timeout;
@@ -111,6 +147,15 @@ export abstract class KeyFaceAction<TSettings extends BatterySettings> extends S
 		kind: DeviceKind,
 	): Face;
 
+	/**
+	 * A face to show the moment a key appears with nothing drawn yet, from what's
+	 * already in memory and nothing else. Undefined leaves the placeholder up
+	 * until the first read lands.
+	 */
+	protected preview(_settings: TSettings): Reading<TSettings> | undefined {
+		return undefined;
+	}
+
 	/** The device's name for titles. Overridden where a nickname can apply. */
 	protected label(_settings: TSettings, reading: BatteryReading): string {
 		return reading.deviceLabel;
@@ -136,7 +181,13 @@ export abstract class KeyFaceAction<TSettings extends BatterySettings> extends S
 		if (!migrated) return settings;
 
 		const shared = settings.configured ? undefined : await sharedAppearance();
-		const merged = { ...this.freshDefaults(), ...migrated, ...(shared ?? {}) };
+		// The revision goes with it: this key already wears that look, so it
+		// mustn't be offered it again as though it were new.
+		const merged = {
+			...this.freshDefaults(),
+			...migrated,
+			...(shared ? { ...shared.appearance, appearanceRev: shared.rev } : {}),
+		};
 
 		await action.setSettings(merged);
 		return merged;
@@ -183,20 +234,60 @@ export abstract class KeyFaceAction<TSettings extends BatterySettings> extends S
 		}
 	}
 
+	/**
+	 * Paints first, reads second. A key coming back into view (a folder opened,
+	 * a page switched to) is drawn straight away from what it last showed, and
+	 * a key seen for the first time from whatever {@link preview} can offer, so
+	 * neither sits on the placeholder for the length of a scan.
+	 */
 	override async onWillAppear(ev: WillAppearEvent<TSettings>): Promise<void> {
 		if (!ev.action.isKey()) return;
-		const settings = await this.ensureDefaults(ev.action, ev.payload.settings);
-		await this.refresh(ev.action, settings);
+
+		const state = this.state(ev.action.id);
+		state.hiddenAt = undefined;
+		// Stream Deck doesn't keep a key's title while it's off screen.
+		state.titleApplied = undefined;
+
+		let settings = await this.ensureDefaults(ev.action, ev.payload.settings);
+		settings = await this.adoptShared(ev.action, settings);
+
+		const cached = state.drawn;
+		if (cached) {
+			cached.settings = settings;
+			if (cached.reading.status === "charging") this.startPulse(ev.action);
+			await this.render(ev.action, settings, cached.reading, cached.kind);
+		} else {
+			const preview = this.preview(settings);
+			if (preview) await this.render(ev.action, preview.settings, preview.reading, preview.kind);
+		}
+
+		// The background chain may have read moments ago, in which case reading
+		// again would only repeat it.
+		if (this.isDue(state, settings)) await this.refresh(ev.action, settings);
 		this.schedule(ev.action, settings);
 	}
 
+	/**
+	 * Keeps the key's state, and its poll chain, for when it's shown again; only
+	 * the things that are about the screen stop. Dropping everything here is what
+	 * made every folder open start from nothing.
+	 */
 	override onWillDisappear(ev: WillDisappearEvent<TSettings>): void {
 		const state = this.keys.get(ev.action.id);
 		if (!state) return;
-		clearTimeout(state.pollTimer);
-		clearInterval(state.pulseTimer);
+
+		state.hiddenAt = Date.now();
+		state.titleApplied = undefined;
+		state.showingNotice = false;
 		clearTimeout(state.noticeTimer);
-		this.keys.delete(ev.action.id);
+		this.stopPulse(ev.action.id);
+	}
+
+	/** Whether a key's last read is old enough that it should read now. */
+	private isDue(state: KeyState<TSettings>, settings: TSettings): boolean {
+		if (!state.drawn || state.readAt === undefined) return true;
+		const wait = nextPollSeconds(settings, state.drawn.reading, state.unchanged) * 1000;
+		return Date.now() - state.readAt >= wait;
 	}
 
 	override async onKeyDown(ev: KeyDownEvent<TSettings>): Promise<void> {
@@ -238,9 +329,38 @@ export abstract class KeyFaceAction<TSettings extends BatterySettings> extends S
 		return false;
 	}
 
-	/** Adopts a shared look. Called for every key when global settings change. */
-	async applyShared(appearance: Appearance): Promise<void> {
-		await applyAppearance(this.actions, appearance);
+	/**
+	 * Hands a newly shared look to every visible key that hasn't taken it yet.
+	 * Keys off screen take it when they next appear.
+	 *
+	 * Safe to call as often as global settings arrive: a key that already has
+	 * this revision is left alone, so a change made to one key after sharing
+	 * survives every later read of global settings.
+	 */
+	async applyShared(): Promise<void> {
+		for (const action of this.actions) {
+			if (!action.isKey()) continue;
+
+			const state = this.keys.get(action.id);
+			const current = state?.drawn?.settings ?? (await action.getSettings<TSettings>());
+			const next = await this.adoptShared(action, current);
+			if (next === current || !state?.drawn) continue;
+
+			// A plugin's own settings write isn't echoed back to it, so nothing
+			// else would repaint the key until its next poll.
+			state.drawn.settings = next;
+			await this.render(action, next, state.drawn.reading, state.drawn.kind);
+		}
+	}
+
+	/** Writes a pending shared look into one key's settings, if there is one. */
+	private async adoptShared(action: KeyAction<TSettings>, settings: TSettings): Promise<TSettings> {
+		const pending = pendingAppearance(settings);
+		if (!pending) return settings;
+
+		const merged = { ...settings, ...pending.appearance, appearanceRev: pending.rev };
+		await action.setSettings(merged);
+		return merged;
 	}
 
 	protected state(actionId: string): KeyState<TSettings> {
@@ -267,21 +387,31 @@ export abstract class KeyFaceAction<TSettings extends BatterySettings> extends S
 	protected schedule(action: KeyAction<TSettings>, settings: TSettings): void {
 		const state = this.state(action.id);
 		clearTimeout(state.pollTimer);
+		state.pollTimer = undefined;
 
 		state.pollBase = refreshSeconds(settings);
 		state.pollMode = resolved(settings).pollMode;
 
-		const seconds = nextPollSeconds(settings, state.drawn?.reading, state.unchanged);
-		state.pollTimer = setTimeout(() => {
+		const hidden = state.hiddenAt !== undefined;
+		if (hidden && Date.now() - state.hiddenAt! >= BACKGROUND_WINDOW_MS) return;
+
+		let seconds = nextPollSeconds(settings, state.drawn?.reading, state.unchanged);
+		if (hidden) seconds = Math.max(seconds, BACKGROUND_MIN_SECONDS);
+
+		const timer = setTimeout(() => {
 			// Read the settings fresh on every tick. Closing over the settings from
 			// when the timer was created would repaint with a stale appearance,
-			// silently undoing any edit made since.
+			// silently undoing any edit made since. A hidden key uses its own copy
+			// instead, which every settings event keeps current: asking Stream Deck
+			// about a key that isn't on screen is a request that may never be
+			// answered.
 			// Whatever the tick managed to read, so a failure after the fetch still
 			// rearms from current settings rather than the ones this timer was
 			// created with, reviving a poll interval the user has since changed.
 			let latest = settings;
-			action
-				.getSettings()
+			const fetch =
+				state.hiddenAt === undefined ? action.getSettings() : Promise.resolve(state.drawn?.settings ?? settings);
+			fetch
 				.then(async (current) => {
 					latest = current;
 					await this.refresh(action, current);
@@ -290,13 +420,20 @@ export abstract class KeyFaceAction<TSettings extends BatterySettings> extends S
 					streamDeck.logger.error(`${this.constructor.name}: scheduled refresh failed`, err);
 				})
 				// Keep the chain alive; a failed tick shouldn't stop the key updating.
-				.finally(() => this.schedule(action, latest));
+				// Unless it has been replaced while this tick ran (the key reappeared,
+				// or its interval was edited): re-arming then would leave two chains
+				// polling the same key.
+				.finally(() => {
+					if (state.pollTimer === timer) this.schedule(action, latest);
+				});
 		}, seconds * 1000);
+		state.pollTimer = timer;
 	}
 
 	protected async refresh(action: KeyAction<TSettings>, settings: TSettings, force = false): Promise<void> {
 		try {
 			const result = await this.read(action, settings, force);
+			this.state(action.id).readAt = Date.now();
 			await this.draw(action, result.settings, result.reading, result.kind);
 			await this.warnOnCrossing(action, result.settings, result.reading);
 		} catch (err) {
@@ -327,6 +464,9 @@ export abstract class KeyFaceAction<TSettings extends BatterySettings> extends S
 		const alertBelow = resolved(settings).alertBelow;
 		const state = this.state(action.id);
 
+		// Not latched while hidden either, so a level that crossed while the key
+		// was off screen still flashes once it's back.
+		if (state.hiddenAt !== undefined) return;
 		if (alertBelow <= 0 || reading.percent === null || reading.status === "stale") return;
 
 		if (reading.percent >= alertBelow || reading.status === "charging") {
@@ -376,7 +516,7 @@ export abstract class KeyFaceAction<TSettings extends BatterySettings> extends S
 	 */
 	protected startPulse(action: KeyAction<TSettings>): void {
 		const state = this.state(action.id);
-		if (state.pulseTimer) return;
+		if (state.pulseTimer || state.hiddenAt !== undefined) return;
 
 		state.pulseTimer = setInterval(() => {
 			const drawn = state.drawn;
@@ -409,8 +549,10 @@ export abstract class KeyFaceAction<TSettings extends BatterySettings> extends S
 		phase = 0,
 	): Promise<void> {
 		// A message owns the key while it's up; the reading behind it is cached
-		// and gets drawn when the message clears.
-		if (this.state(action.id).showingNotice) return;
+		// and gets drawn when the message clears. A key off screen has nothing to
+		// paint on, and is repainted from the cache when it comes back.
+		const state = this.state(action.id);
+		if (state.showingNotice || state.hiddenAt !== undefined) return;
 
 		const face = this.present(action, settings, live, kind);
 		const look = resolved(settings);

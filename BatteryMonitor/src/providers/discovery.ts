@@ -54,8 +54,7 @@ class DeviceDiscovery {
 
 	/** Lists everything detected on this machine, right now. */
 	async list(force = false): Promise<DiscoveredDevice[]> {
-		if (force) this.invalidate();
-		if (this.cache && Date.now() - this.cache.at < CACHE_TTL_MS) {
+		if (!force && this.cache && Date.now() - this.cache.at < CACHE_TTL_MS) {
 			return this.cache.devices;
 		}
 		// Serialize: concurrent scans would fight over exclusive HID handles.
@@ -65,12 +64,20 @@ class DeviceDiscovery {
 		return this.inflight;
 	}
 
-	async find(key: string, force = false): Promise<DiscoveredDevice | undefined> {
-		return (await this.list(force)).find((d) => d.key === key);
+	/**
+	 * The last scan's result if it's no older than `maxAgeMs`, without scanning.
+	 *
+	 * For painting a key the moment it appears: a folder opening shouldn't leave
+	 * its keys blank for the ~3s a scan takes when an answer from a minute ago is
+	 * already in memory. The real read follows straight after.
+	 */
+	peek(maxAgeMs: number): DiscoveredDevice[] | undefined {
+		if (!this.cache || Date.now() - this.cache.at > maxAgeMs) return undefined;
+		return this.cache.devices;
 	}
 
-	invalidate(): void {
-		this.cache = undefined;
+	async find(key: string, force = false): Promise<DiscoveredDevice | undefined> {
+		return (await this.list(force)).find((d) => d.key === key);
 	}
 
 	provider(id: string): BatteryProvider | undefined {

@@ -19,9 +19,14 @@
 	display: none !important;
 }
 
+/* sdpi-components styles its own controls, but nothing sets a font for the
+   page itself, so the status strip, headings and hints fell back to the
+   webview's default serif while the controls next to them were Segoe UI.
+   Same stack sdpi-components uses. */
 body {
 	margin: 0;
 	padding: 10px 0 16px 0;
+	font-family: "Segoe UI", Arial, Roboto, Helvetica, sans-serif;
 }
 
 .status,

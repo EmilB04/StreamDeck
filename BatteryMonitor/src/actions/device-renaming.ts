@@ -9,9 +9,10 @@ import type {
 } from "@elgato/streamdeck";
 import { discovery } from "../providers/discovery";
 import { renameKeyImage } from "../ui/battery-svg";
+import { PREVIEW_MAX_AGE_MS } from "./key-face";
 import { faceColors } from "./settings";
 import type { BatterySettings } from "./settings";
-import { loadRenames, renames, setRename, withRenames } from "./renames";
+import { loadRenames, renames, setRename } from "./renames";
 import type { UiMessage } from "./ui-messages";
 import { replyToPanel } from "./ui-messages";
 
@@ -41,7 +42,9 @@ export class DeviceRenamingAction extends SingletonAction<RenamingSettings> {
 
 	override async onWillAppear(ev: WillAppearEvent<RenamingSettings>): Promise<void> {
 		if (!ev.action.isKey()) return;
-		await loadRenames(true);
+		// The cache is kept current by the global settings event and by every
+		// rename, so a folder opening doesn't need a round-trip to Stream Deck.
+		await loadRenames();
 		this.targets.set(ev.action.id, ev.payload.settings.renameTarget?.trim() ?? "");
 		await this.draw(ev.action, ev.payload.settings);
 	}
@@ -133,9 +136,18 @@ export class DeviceRenamingAction extends SingletonAction<RenamingSettings> {
 		await replyToPanel({ event: "getDevices", items, renames: map });
 	}
 
+	/**
+	 * Paints from the last scan straight away when there is one, then again if a
+	 * fresh scan counts differently, so the key isn't blank while it runs.
+	 */
 	private async draw(action: KeyAction<RenamingSettings>, settings: RenamingSettings): Promise<void> {
-		const devices = withRenames(await discovery.list());
-		const count = Object.keys(renames()).length;
-		await action.setImage(renameKeyImage(count, devices.length, faceColors(settings)));
+		const paint = (detected: number) =>
+			action.setImage(renameKeyImage(Object.keys(renames()).length, detected, faceColors(settings)));
+
+		const cached = discovery.peek(PREVIEW_MAX_AGE_MS);
+		if (cached) await paint(cached.length);
+
+		const devices = await discovery.list();
+		if (devices.length !== cached?.length) await paint(devices.length);
 	}
 }

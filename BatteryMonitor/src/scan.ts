@@ -24,7 +24,7 @@ async function printHidInterfaces(): Promise<void> {
 
 	console.log("HID interfaces");
 	if (!devices) {
-		console.log("  node-hid did not load — every HID provider is disabled.");
+		console.log("  node-hid did not load. Every HID provider is disabled.");
 		console.log("  Run `npm run sync-deps` on the machine running Stream Deck.\n");
 		return;
 	}
@@ -62,9 +62,7 @@ async function main(): Promise<void> {
 		console.log(`${device.label}`);
 		console.log(`  key      ${device.key}`);
 		console.log(`  provider ${device.providerId}   kind ${device.kind}`);
-		console.log(
-			`  battery  ${level} (${reading?.status ?? "unknown"})${reading?.detail ? ` — ${reading.detail}` : ""}`,
-		);
+		console.log(`  battery  ${level} (${reading?.status ?? "unknown"})${reading?.detail ? `: ${reading.detail}` : ""}`);
 		console.log("");
 	}
 }

@@ -68,7 +68,7 @@ describe("labelling devices whose protocol has never met the hardware", () => {
 		const [battery] = groupedDevices([untested("Razer Basilisk V3 Pro")]) as UiGroup[];
 		assert.deepEqual(
 			battery.children.map((c) => c.label),
-			["Razer Basilisk V3 Pro (untested — please report)"],
+			["Razer Basilisk V3 Pro (untested, please report)"],
 		);
 	});
 
