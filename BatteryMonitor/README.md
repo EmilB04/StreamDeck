@@ -18,23 +18,23 @@ A folder of keys, each with its own meter, percentage, icon and name line. They
 keep reading while the folder is closed, so it opens with current levels. The
 `2h` prefix on the earbuds shows how long ago the plugin last heard from them.
 
-![Seven key faces labelled healthy, low, charging, switched off, mains powered, lowest of all and pressed while off](store/gallery/03-states.png)
+![Seven key faces labelled healthy, low, charging, switched off, mains powered, lowest of all and pressed while off](store/gallery/02-states.png)
 
 Every state a key can be in: healthy, under the low threshold, charging (a bolt,
 and the face breathes), switched off (dimmed, last known level), mains powered,
 the **Lowest Battery** frame once its device runs low, and the message a press
 leaves when the device is gone.
 
-![Bar, ring and number meters, and the same keys in violet, paper and mono colour themes](store/gallery/05-styles.png)
+![Bar, ring and number meters, and the same keys in violet, paper and mono colour themes](store/gallery/04-styles.png)
 
 Three meters, with your own colours and thresholds.
 
-![The Device Battery property inspector with a live status strip at the top](store/gallery/04-inspector.png)
+![The Device Battery property inspector with a live status strip at the top](store/gallery/03-inspector.png)
 
 The property inspector. The strip along the top shows what the key reads while
 you configure it, so you spot a wrong device before you close the panel.
 
-![The Lowest Battery and Device Renaming panels next to their keys](store/gallery/06-more-actions.png)
+![The Lowest Battery and Device Renaming panels next to their keys](store/gallery/05-more-actions.png)
 
 The other two actions.
 

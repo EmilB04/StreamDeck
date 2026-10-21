@@ -98,10 +98,9 @@ One button opens a web page: the HeadsetControl download, in your browser.
       requires (a thumbnail plus at least three gallery images):
       - `01-thumbnail.png`: a full folder of keys on a 15-key deck, use as
         the thumbnail
-      - `02-hardware.png`: photo of a real Stream Deck Mini running it
-      - `03-states.png`: every key state, from healthy to pressed while off
-      - `04-inspector.png`: the Device Battery panel
-      - `05-styles.png`: bar, ring and number meters, plus three colour themes
-      - `06-more-actions.png`: the Lowest Battery and Device Renaming panels
+      - `02-states.png`: every key state, from healthy to pressed while off
+      - `03-inspector.png`: the Device Battery panel
+      - `04-styles.png`: bar, ring and number meters, plus three colour themes
+      - `05-more-actions.png`: the Lowest Battery and Device Renaming panels
 - [x] Support URL: https://github.com/EmilB04/StreamDeck (also in the manifest as `URL`)
 - [x] Licence: MIT with attribution, see `LICENSE`
