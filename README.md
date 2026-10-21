@@ -27,9 +27,9 @@ has no model list; the plugin finds them. See more screenshots in the
 To remove it, right-click the plugin in Stream Deck's store pane and uninstall.
 It leaves nothing behind.
 
-Battery Monitor also needs Node.js 20+ on the machine running Stream Deck, and
-[HeadsetControl](https://github.com/Sapd/HeadsetControl/releases) on `PATH` if you
-want headset support. Find the full requirements in
+Battery Monitor runs on the Node.js that ships inside the Stream Deck app, so you
+don't install Node yourself. For headset support it needs
+[HeadsetControl](https://github.com/Sapd/HeadsetControl/releases) on `PATH`. Find the full requirements in
 [its release notes](BatteryMonitor/RELEASE-NOTES.md).
 
 ## Build from source

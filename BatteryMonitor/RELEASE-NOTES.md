@@ -1,5 +1,20 @@
 # Battery Monitor release notes
 
+## v1.2.1
+
+### Security
+
+- **The Node debugger is off.** Earlier releases set `Nodejs.Debug` to
+  `"enabled"` in the manifest, so Stream Deck started the plugin with Node's
+  inspector listening on a local port. Any program on your machine could attach
+  to it and run code inside the plugin. Update to close it. Log files are
+  unaffected.
+
+### Docs
+
+- The requirements no longer ask you to install Node.js. The Stream Deck app
+  ships the runtime the plugin uses.
+
 ## v1.2.0
 
 ### Backup device

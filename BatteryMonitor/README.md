@@ -126,7 +126,8 @@ the top of the file, and open all three panels to test them.
 
 - Stream Deck app on Windows 10 or later. I haven't run the HID providers on
   macOS, so the manifest doesn't claim it.
-- Node.js 20+ on the machine running Stream Deck
+- No separate Node.js install: Stream Deck 6.5+ ships the Node 20 runtime the
+  plugin runs on. You need Node yourself only to build from source.
 - [HeadsetControl](https://github.com/Sapd/HeadsetControl/releases) on `PATH`
   for headsets. The Windows release ships an installer with an "add to PATH"
   option, which the panels tell you to tick. No package manager carries the CLI
@@ -260,7 +261,7 @@ Already prepared:
   a separate asset from the manifest's. You upload it in Maker Console, so it
   lives outside the `.sdPlugin` folder and never ships.
 - **`store/listing.md`** has the listing copy and the gallery checklist.
-- **Version `1.2.0.0`**, and **Windows only**: the manifest declares no macOS
+- **Version `1.2.1.0`**, and **Windows only**: the manifest declares no macOS
   support. Much of the code might work on a Mac: the PowerShell providers turn
   themselves off, `launch.ts` handles `open`, and node-hid ships darwin
   binaries. But HID reads there need Input Monitoring permission, and I haven't
@@ -652,9 +653,15 @@ Useful CLI commands (`npx @elgato/cli <cmd>`):
 
 ## Debugging
 
-The manifest enables `Nodejs.Debug`, and logger output lands in
-`com.emilberglund.batterymonitor.sdPlugin/logs/`. Every scan logs how many
-devices it found and how long it took. Provider failures log the provider id.
+Logger output lands in `com.emilberglund.batterymonitor.sdPlugin/logs/`. Every
+scan logs how many devices it found and how long it took. Provider failures log
+the provider id.
+
+The manifest ships with `Nodejs.Debug` set to `"disabled"`. When it's
+`"enabled"`, Stream Deck starts the plugin with Node's inspector listening on a
+local port, and any program on the machine could attach and run code inside the
+plugin. To step through the code, set it to `"enabled"` in your local copy and
+don't commit it. The log files are written either way.
 
 If a key shows `—`, `N/A` or `ERR`, run `npm run scan` to see which provider
 fails and why. Each device prints its status and detail text.
