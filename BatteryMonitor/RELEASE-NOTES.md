@@ -4,11 +4,12 @@
 
 ### Security
 
-- **The Node debugger is off.** Earlier releases set `Nodejs.Debug` to
-  `"enabled"` in the manifest, so Stream Deck started the plugin with Node's
-  inspector listening on a local port. Any program on your machine could attach
-  to it and run code inside the plugin. Update to close it. Log files are
-  unaffected.
+- **The Node debugger is off in the source manifest.** It set `Nodejs.Debug` to
+  `"enabled"`, so a copy installed from source (`npm run deploy` or
+  `@elgato/cli link`) started with Node's inspector listening on a local port,
+  where any program on the machine could attach and run code inside the plugin.
+  The packaged downloads were never affected: `streamdeck pack` drops the
+  setting. Log files are written either way.
 
 ### Docs
 
