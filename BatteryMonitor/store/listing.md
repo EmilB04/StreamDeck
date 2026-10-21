@@ -96,12 +96,12 @@ One button opens a web page: the HeadsetControl download, in your browser.
 - [x] App icon: `store/app-icon-256.png`, `store/app-icon-512.png`
 - [x] Gallery images in `store/gallery/`, all 1920 × 960 as Maker Console
       requires (a thumbnail plus at least three gallery images):
-      - `01-thumbnail.png`: the deck render, use as the thumbnail
+      - `01-thumbnail.png`: a full folder of keys on a 15-key deck, use as
+        the thumbnail
       - `02-hardware.png`: photo of a real Stream Deck Mini running it
       - `03-states.png`: every key state, from healthy to pressed while off
       - `04-inspector.png`: the Device Battery panel
       - `05-styles.png`: bar, ring and number meters, plus three colour themes
-      - `06-folder.png`: a full folder of keys on a 15-key deck
-      - `07-more-actions.png`: the Lowest Battery and Device Renaming panels
+      - `06-more-actions.png`: the Lowest Battery and Device Renaming panels
 - [x] Support URL: https://github.com/EmilB04/StreamDeck (also in the manifest as `URL`)
 - [x] Licence: MIT with attribution, see `LICENSE`

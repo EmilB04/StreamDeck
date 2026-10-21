@@ -12,15 +12,11 @@ the machine reports, so new gear shows up when you plug it in.
 
 ## What it looks like
 
-![Six keys: a DualSense at 85% and an iPhone at 77% drawn as rings, a HyperX headset at 94%, a G502 at 80% and an ASUS keyboard at 89% drawn as bars](store/gallery/01-thumbnail.png)
+![A 15-key Stream Deck showing a folder of battery keys: headset, mouse, keyboard, a charging controller, phone, watch, earbuds marked offline, a mains-powered microphone, the Lowest Battery key and the Device Renaming key](store/gallery/01-thumbnail.png)
 
-Ring or bar, percentage, device icon and a name line, set per key. The `1h` and
-`1m` prefixes show how long ago the plugin last heard from each device.
-
-![A 15-key Stream Deck showing a folder of battery keys: headset, mouse, keyboard, a charging controller, phone, watch, earbuds marked offline, a mains-powered microphone, the Lowest Battery key and the Device Renaming key](store/gallery/06-folder.png)
-
-A folder of keys. They keep reading while the folder is closed, so it opens with
-current levels.
+A folder of keys, each with its own meter, percentage, icon and name line. They
+keep reading while the folder is closed, so it opens with current levels. The
+`2h` prefix on the earbuds shows how long ago the plugin last heard from them.
 
 ![Seven key faces labelled healthy, low, charging, switched off, mains powered, lowest of all and pressed while off](store/gallery/03-states.png)
 
@@ -38,7 +34,7 @@ Three meters, with your own colours and thresholds.
 The property inspector. The strip along the top shows what the key reads while
 you configure it, so you spot a wrong device before you close the panel.
 
-![The Lowest Battery and Device Renaming panels next to their keys](store/gallery/07-more-actions.png)
+![The Lowest Battery and Device Renaming panels next to their keys](store/gallery/06-more-actions.png)
 
 The other two actions.
 

@@ -11,10 +11,10 @@ per plugin, each self-contained: its own `package.json`, build, tests and docs.
 
 ### Battery Monitor
 
-[![Battery Monitor keys on a Stream Deck](BatteryMonitor/store/gallery/01-thumbnail.png)](BatteryMonitor/)
+[![A folder of Battery Monitor keys on a 15-key Stream Deck](BatteryMonitor/store/gallery/01-thumbnail.png)](BatteryMonitor/)
 
-A controller, a phone, a headset, a mouse and a keyboard on five keys. The code
-has no model list; the plugin finds them. See more screenshots in the
+A headset, mouse, keyboard, controller, phone, watch, earbuds and microphone,
+each on its own key. The code has no model list; the plugin finds them. See more screenshots in the
 [plugin README](BatteryMonitor/README.md#what-it-looks-like).
 
 ## Install a plugin
