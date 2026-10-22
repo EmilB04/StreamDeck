@@ -5,17 +5,22 @@ Run: python3 scripts/gen-icons.py
 Everything is drawn on a supersampled canvas and downscaled with LANCZOS, since
 Pillow does no anti-aliasing of its own and these are looked at down to 20px.
 
-Sizes and styles follow Elgato's asset guidelines:
-  marketplace     288  (@2x 576)  the icon inside the Stream Deck app
-  store icon      256  (@2x 512)  uploaded separately in Maker Console
+The app icon is not drawn here. It is a real key face from the plugin's own
+renderer, kept as store/app-icon.svg and rasterised to
+  imgs/plugin/marketplace  288  (@2x 576)  the icon inside the Stream Deck app
+  store/app-icon           256  (@2x 512)  uploaded separately in Maker Console
+with a browser, since Pillow can't render SVG text. Open the SVG in Chrome or
+Edge with Segoe UI installed and screenshot it at each size on a transparent
+background.
+
+Sizes and styles for the rest follow Elgato's asset guidelines:
   category-icon    28  (@2x  56)  the group header in the actions list
   action icon      20  (@2x  40)  the action's own row
   key image        72  (@2x 144)  what a key shows before the first reading
 
 The action and category icons are monochrome white on a transparent ground,
 which the guidelines require: they sit in Stream Deck's own lists, where a
-coloured icon would fight the surrounding chrome. Colour is kept for the two
-icons that stand alone — the app icon and the store listing.
+coloured icon would fight the surrounding chrome.
 """
 from pathlib import Path
 from PIL import Image, ImageDraw
@@ -140,9 +145,6 @@ def save(name, size, **kw):
         print(f"wrote {out.relative_to(SDPLUGIN)} ({size * scale}px)")
 
 
-# The icon shown inside the Stream Deck app.
-save("imgs/plugin/marketplace", 288, background=True, fill_ratio=0.78, with_bolt=True)
-
 # Actions-list group header: monochrome, per the icon guidelines.
 save("imgs/plugin/category-icon", 28, background=False, fill_ratio=0.78, with_bolt=False, monochrome=True)
 
@@ -160,11 +162,3 @@ save("imgs/actions/lowest-battery/key", 72, background=True, fill_ratio=0, with_
 # The renaming action: a tag rather than a battery, since it isn't about charge.
 save_tag("imgs/actions/device-renaming/icon", 20, background=False, monochrome=True)
 save_tag("imgs/actions/device-renaming/key", 72, background=True)
-
-# Marketplace listing icon, uploaded in Maker Console rather than shipped in the
-# package — hence a folder outside the .sdPlugin.
-for store_size in (256, 512):
-    out = ROOT / "store" / f"app-icon-{store_size}.png"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    battery(store_size, background=True, fill_ratio=0.78, with_bolt=True).save(out)
-    print(f"wrote {out.relative_to(ROOT)} ({store_size}px)")

@@ -1,0 +1,20 @@
+<!--
+  Battery Monitor app icon: a Device Battery key face, drawn by the plugin's own
+  renderer (batteryKeyImage in src/ui/battery-svg.ts: headset, bar, 82%), clipped
+  to the icon's rounded square. The PNGs in store/ and imgs/plugin/marketplace*
+  are rasterised from this file; see scripts/gen-icons.py.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72">
+	<defs><clipPath id="icon-shape"><rect width="72" height="72" rx="15.84"/></clipPath></defs>
+	<g clip-path="url(#icon-shape)"><rect width="72" height="72" fill="#000000"/>
+		<g transform="translate(25.50 2.50) scale(0.875)">
+			<path d="M3.2 15.5 V12 a8.8 8.8 0 0 1 17.6 0 v3.5" fill="none" stroke="#eaeaea" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+			<rect x="1.4" y="13.4" width="5" height="8.4" rx="2.5" fill="none" stroke="#eaeaea" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+			<rect x="17.6" y="13.4" width="5" height="8.4" rx="2.5" fill="none" stroke="#eaeaea" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M18 21.6 q-1.4 2.6 -4.4 2.6" fill="none" stroke="#eaeaea" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+			<circle cx="12.6" cy="24.2" r="1.1" fill="#eaeaea"/></g>
+		<rect x="13" y="29.5" width="42" height="16" rx="4" fill="none" stroke="#eaeaea" stroke-width="3"/>
+		<rect x="55" y="34.3" width="4" height="6.4" rx="1" fill="#eaeaea"/>
+		<rect x="16" y="32.5" width="29.52" height="10" rx="2" fill="#2ecc71" fill-opacity="1"/><text x="36" y="66.26" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="18.0" font-weight="700" fill="#2ecc71" fill-opacity="1">82%</text>
+	</g>
+</svg>

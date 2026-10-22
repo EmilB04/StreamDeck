@@ -264,7 +264,7 @@ Already prepared:
   a separate asset from the manifest's. You upload it in Maker Console, so it
   lives outside the `.sdPlugin` folder and never ships.
 - **`store/listing.md`** has the listing copy and the gallery checklist.
-- **Version `1.2.2.0`**, and **Windows only**: the manifest declares no macOS
+- **Version `1.2.3.0`**, and **Windows only**: the manifest declares no macOS
   support. Much of the code might work on a Mac: the PowerShell providers turn
   themselves off, `launch.ts` handles `open`, and node-hid ships darwin
   binaries. But HID reads there need Input Monitoring permission, and I haven't

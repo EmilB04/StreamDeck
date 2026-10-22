@@ -1,5 +1,12 @@
 # Battery Monitor release notes
 
+## v1.2.3
+
+- **New icon.** The plugin icon is now a real Device Battery key face (a
+  headset, a green bar and 82%), drawn by the plugin's own renderer, so it
+  looks like what the plugin puts on your keys. The Marketplace listing uses the
+  same icon.
+
 ## v1.2.2
 
 ### Marketplace DRM
