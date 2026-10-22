@@ -81,12 +81,17 @@ see it exists.
 
 ### When a device isn't listed
 
-`bin/scan.js` ships inside the installed plugin for this. It prints every HID
-interface the machine exposes, then what each provider made of them:
+Start with the plugin log under
+`%APPDATA%\Elgato\StreamDeck\Plugins\com.emilberglund.batterymonitor.sdPlugin\logs\`.
+Each scan writes a `discovery: headset=0 logitech=2 asus=1 …` line with the
+count from every provider, which tells "found nothing" apart from "the HID layer
+never loaded".
 
-```pwsh
-node "$env:APPDATA\Elgato\StreamDeck\Plugins\com.emilberglund.batterymonitor.sdPlugin\bin\scan.js"
-```
+For the full picture, clone this repository, run `npm install`, `npm run build`
+and `npm run sync-deps`, then `npm run scan`. It prints every HID interface the
+machine exposes, then what each provider made of them. Earlier versions shipped
+this as `bin/scan.js` inside the plugin, but Marketplace DRM encrypts the
+package, so the plugin no longer carries it.
 
 Reading the output:
 
@@ -99,9 +104,6 @@ Reading the output:
   open an [issue](https://github.com/EmilB04/StreamDeck/issues) and include the
   interface lines; the `usagePage` usually decides it.
 
-The plugin log has a short version of the same thing, a
-`discovery: headset=0 logitech=2 asus=1 …` line per scan, under
-`%APPDATA%\Elgato\StreamDeck\Plugins\com.emilberglund.batterymonitor.sdPlugin\logs\`.
 
 ## Third-party code
 
@@ -122,8 +124,9 @@ the top of the file, and open all three panels to test them.
 
 - Stream Deck app on Windows 10 or later. I haven't run the HID providers on
   macOS, so the manifest doesn't claim it.
-- No separate Node.js install: Stream Deck 6.5+ ships the Node 20 runtime the
-  plugin runs on. You need Node yourself only to build from source.
+- Stream Deck 6.9 or later, which the manifest requires for Marketplace DRM.
+- No separate Node.js install: Stream Deck ships the Node 20 runtime the plugin
+  runs on. You need Node yourself only to build from source.
 - [HeadsetControl](https://github.com/Sapd/HeadsetControl/releases) on `PATH`
   for headsets. The Windows release ships an installer with an "add to PATH"
   option, which the panels tell you to tick. No package manager carries the CLI
@@ -247,8 +250,12 @@ Already prepared:
 
 - **`.sdignore`** keeps development leftovers out of the package: logs, editor
   state, source maps, and node-hid's prebuilt binaries for platforms the
-  manifest doesn't declare (about 4 MB of a 5 MB package). It keeps
-  `bin/scan.js` on purpose; see "When a device isn't listed".
+  manifest doesn't declare (about 4 MB of a 5 MB package), and `bin/scan.js`
+  (see "When a device isn't listed").
+- **DRM is on**: `SDKVersion: 3` and `Software.MinimumVersion: "6.9"`, which
+  Maker Console requires. Elgato encrypts the package after upload, so files in
+  it must stay unchanged and the plugin must not read its manifest at runtime.
+  The plugin's own code doesn't; the SDK handles a protected manifest itself.
 - **Action and category icons are monochrome white on transparent**, as the
   [icon guidelines](https://docs.elgato.com/guidelines/stream-deck/plugins/)
   require for anything in Stream Deck's own lists. The app icon and the store
@@ -257,7 +264,7 @@ Already prepared:
   a separate asset from the manifest's. You upload it in Maker Console, so it
   lives outside the `.sdPlugin` folder and never ships.
 - **`store/listing.md`** has the listing copy and the gallery checklist.
-- **Version `1.2.1.0`**, and **Windows only**: the manifest declares no macOS
+- **Version `1.2.2.0`**, and **Windows only**: the manifest declares no macOS
   support. Much of the code might work on a Mac: the PowerShell providers turn
   themselves off, `launch.ts` handles `open`, and node-hid ships darwin
   binaries. But HID reads there need Input Monitoring permission, and I haven't
@@ -270,8 +277,6 @@ Still open before submitting:
   users will run that code. Their picker entries read
   "(untested, please report)", set from `DiscoveredDevice.unverified` in each
   provider. Remove the flag as hardware confirms each one.
-- Optional: **DRM** needs `SDKVersion: 3` and `Software.MinimumVersion: 6.9`.
-  It encrypts the package, and the manifest stays readable at runtime.
 
 ## Actions
 

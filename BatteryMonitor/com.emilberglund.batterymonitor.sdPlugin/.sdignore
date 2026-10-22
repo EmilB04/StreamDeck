@@ -8,10 +8,10 @@ logs/
 .claude/
 *.map
 
-# bin/scan.js ships even though the plugin never loads it: it is the only way an
-# installed user can answer "why isn't my device listed", by running
-#   node "%APPDATA%\Elgato\StreamDeck\Plugins\com.emilberglund.batterymonitor.sdPlugin\bin\scan.js"
-# and pasting the output into an issue. It costs ~30 kB in a 1.3 MB download.
+# The diagnostic CLI stays out of the package. Marketplace DRM encrypts what
+# ships, so a user couldn't run it with plain `node` anyway; run it from a
+# clone of the repo with `npm run scan` instead.
+bin/scan.js
 node_modules/.bin/
 
 # node-hid ships a prebuilt binary per platform. The manifest declares Windows

@@ -1,5 +1,18 @@
 # Battery Monitor release notes
 
+## v1.2.2
+
+### Marketplace DRM
+
+The plugin now meets Elgato's Marketplace requirements: SDK version 3 and
+Stream Deck 6.9 or later. Maker Console encrypts the package after upload.
+
+- **Stream Deck 6.9 or later is required.** Older versions can't install it.
+- **`bin/scan.js` no longer ships in the plugin.** DRM encrypts the package, so
+  you couldn't run it with `node` anyway. Run `npm run scan` from a clone of the
+  repository instead, or check the `discovery:` lines in the plugin log.
+- Packaging moved to the current Elgato CLI (1.10).
+
 ## v1.2.1
 
 ### Security

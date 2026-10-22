@@ -2,16 +2,16 @@
 	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
 	"Name": "Battery Monitor",
 	"UUID": "com.emilberglund.batterymonitor",
-	"Version": "1.2.1.0",
+	"Version": "1.2.2.0",
 	"Author": "Emil Berglund",
 	"Description": "Shows the battery level of your wireless devices on a key. Finds your headsets, mice, keyboards, controllers and Bluetooth devices, warns you when one runs low, and can watch whichever device is emptiest.",
 	"Icon": "imgs/plugin/marketplace",
 	"CategoryIcon": "imgs/plugin/category-icon",
 	"Category": "Battery Monitor",
 	"CodePath": "bin/plugin.js",
-	"SDKVersion": 2,
+	"SDKVersion": 3,
 	"Software": {
-		"MinimumVersion": "6.5"
+		"MinimumVersion": "6.9"
 	},
 	"OS": [
 		{

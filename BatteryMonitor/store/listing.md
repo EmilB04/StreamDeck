@@ -49,7 +49,7 @@ gear and it shows up in the list.
 
 ## Requirements
 
-- Windows 10 or later
+- Windows 10 or later, Stream Deck 6.9 or later
 - For **headsets**: [HeadsetControl](https://github.com/Sapd/HeadsetControl)
   installed and on your PATH. The panel tells you whether the plugin found it
   and links to the download. Other devices work without it.
