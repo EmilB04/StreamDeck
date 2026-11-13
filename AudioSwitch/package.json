@@ -1,6 +1,6 @@
 {
   "name": "com.emilberglund.audioswitch",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Stream Deck plugin that switches the Windows default playback and recording device from a key.",
   "scripts": {

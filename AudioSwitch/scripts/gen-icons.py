@@ -9,8 +9,13 @@ The two glyphs are the ones the key renderer draws (src/ui/key-svg.ts), on the
 same 48-unit grid, so a key looks the same before its first reading as after.
 If one changes, change the other.
 
-Sizes and styles follow Elgato's asset guidelines:
-  marketplace     288  (@2x 576)  the icon inside the Stream Deck app
+The app icon is not drawn here. It is a real key face from the plugin's own
+renderer, kept as store/app-icon.svg and rasterised, with the gallery, by
+scripts/render-store.mjs (it needs a browser, since Pillow can't draw SVG text):
+  imgs/plugin/marketplace  288  (@2x 576)  the icon inside the Stream Deck app
+  store/app-icon           256  (@2x 512)  uploaded separately in Maker Console
+
+Sizes and styles for the rest follow Elgato's asset guidelines:
   category-icon    28  (@2x  56)  the group header in the actions list
   action icon      20  (@2x  40)  the action's own row
   key image        72  (@2x 144)  what a key shows before the first reading
@@ -26,8 +31,6 @@ ROOT = Path(__file__).resolve().parent.parent
 SDPLUGIN = ROOT / "com.emilberglund.audioswitch.sdPlugin"
 
 BLACK = (0, 0, 0, 255)
-PANEL = (30, 32, 36, 255)
-ACCENT = (85, 255, 127, 255)
 DIM = (125, 130, 139, 255)
 WHITE = (255, 255, 255, 255)
 
@@ -88,7 +91,6 @@ def save(name, size, flow, **kw):
         print(f"wrote {out.relative_to(SDPLUGIN)} ({size * scale}px)")
 
 
-save("imgs/plugin/marketplace", 288, "output", color=ACCENT, background=PANEL, radius=0.22, fill=0.62)
 save("imgs/plugin/category-icon", 28, "output", color=WHITE, fill=0.92)
 
 for flow, action in (("output", "output-device"), ("input", "input-device")):

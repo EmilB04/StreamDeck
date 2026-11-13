@@ -224,6 +224,8 @@ why: PowerShell missing or blocked, or a compile error.
 | `src/ui/key-svg.ts` | Draws the key face and the icons. |
 | `com.emilberglund.audioswitch.sdPlugin/ui/` | The property inspectors. |
 | `scripts/gen-icons.py` | Draws the static icons (needs Pillow). |
+| `scripts/render-store.mjs` | Draws the app icon and the Marketplace gallery from `key-svg.ts`, using Edge. |
+| `store/` | The Marketplace listing: `listing.md`, the app icon and the gallery images. |
 | `docs/keys.png` | The image at the top, rendered from `key-svg.ts`. |
 
 ## Third-party code

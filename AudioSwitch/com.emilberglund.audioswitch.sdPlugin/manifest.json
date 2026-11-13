@@ -2,7 +2,7 @@
 	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
 	"Name": "Audio Switch",
 	"UUID": "com.emilberglund.audioswitch",
-	"Version": "1.0.0.0",
+	"Version": "1.0.1.0",
 	"Author": "Emil Berglund",
 	"Description": "Switches the Windows default speakers, headphones or microphone with one key. Set a key to one device, or step through several. The key shows which device is in use.",
 	"Icon": "imgs/plugin/marketplace",

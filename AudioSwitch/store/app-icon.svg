@@ -1,0 +1,10 @@
+<!--
+  Audio Switch app icon: a key face drawn by the plugin's own renderer
+  (keySvg in src/ui/key-svg.ts: headphones, lit, "Headphones"), clipped to the
+  icon's rounded square. The PNGs in store/ and imgs/plugin/marketplace* are
+  rasterised from this file by scripts/render-store.mjs.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72">
+	<defs><clipPath id="icon-shape"><rect width="72" height="72" rx="15.84"/></clipPath></defs>
+	<g clip-path="url(#icon-shape)"><svg x="0" y="0" width="72" height="72" viewBox="0 0 144 144"><rect width="144" height="144" fill="#000000"/><g transform="translate(44.400000000000006 22.400000000000002) scale(1.15)"><path d="M9 29v-5a15 15 0 0 1 30 0v5" fill="none" stroke="#eaeaea" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="6" y="27" width="10" height="15" rx="3" fill="#eaeaea"/><rect x="32" y="27" width="10" height="15" rx="3" fill="#eaeaea"/></g><text x="72" y="108" text-anchor="middle" font-family="Segoe UI, Arial, Helvetica, sans-serif" font-size="20" font-weight="600" fill="#eaeaea">Headphones</text></svg></g>
+</svg>

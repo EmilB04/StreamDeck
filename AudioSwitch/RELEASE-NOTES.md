@@ -1,5 +1,13 @@
 # Audio Switch release notes
 
+## v1.0.1
+
+- **New app icon.** The icon in Stream Deck's plugin list is a real key face
+  drawn by the plugin, in the same white as the keys, in place of the green
+  speaker.
+- Marketplace listing and gallery images added to the repository (`store/`).
+  No change to how the plugin behaves.
+
 ## v1.0.0
 
 First release.
