@@ -1,0 +1,65 @@
+{
+	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+	"Name": "Audio Switch",
+	"UUID": "com.emilberglund.audioswitch",
+	"Version": "1.0.0.0",
+	"Author": "Emil Berglund",
+	"Description": "Switches the Windows default speakers, headphones or microphone with one key. Set a key to one device, or step through several. The key shows which device is in use.",
+	"Icon": "imgs/plugin/marketplace",
+	"CategoryIcon": "imgs/plugin/category-icon",
+	"Category": "Audio Switch",
+	"CodePath": "bin/plugin.js",
+	"SDKVersion": 3,
+	"Software": {
+		"MinimumVersion": "6.9"
+	},
+	"OS": [
+		{
+			"Platform": "windows",
+			"MinimumVersion": "10"
+		}
+	],
+	"Nodejs": {
+		"Version": "20",
+		"Debug": "disabled"
+	},
+	"Actions": [
+		{
+			"Name": "Output Device",
+			"UUID": "com.emilberglund.audioswitch.output-device",
+			"Icon": "imgs/actions/output-device/icon",
+			"Tooltip": "Switches the default playback device: to one device, or to the next of several.",
+			"PropertyInspectorPath": "ui/output-device.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/output-device/key",
+					"TitleAlignment": "bottom",
+					"FontSize": 13
+				}
+			],
+			"UserTitleEnabled": false
+		},
+		{
+			"Name": "Input Device",
+			"UUID": "com.emilberglund.audioswitch.input-device",
+			"Icon": "imgs/actions/input-device/icon",
+			"Tooltip": "Switches the default recording device: to one microphone, or to the next of several.",
+			"PropertyInspectorPath": "ui/input-device.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/input-device/key",
+					"TitleAlignment": "bottom",
+					"FontSize": 13
+				}
+			],
+			"UserTitleEnabled": false
+		}
+	],
+	"URL": "https://github.com/EmilB04/StreamDeck"
+}

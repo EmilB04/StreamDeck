@@ -8,6 +8,7 @@ per plugin, each self-contained: its own `package.json`, build, tests and docs.
 | Plugin | What it does | Platform | Download |
 |---|---|---|---|
 | [**Battery Monitor**](BatteryMonitor/) | Puts the battery level of your wireless headsets, mice, keyboards, controllers and Bluetooth devices on a key. Finds them itself, warns when one runs low, and has a key for whichever is emptiest. | Windows 10+ | [Latest release](https://github.com/EmilB04/StreamDeck/releases/latest) |
+| [**Audio Switch**](AudioSwitch/) | Switches the Windows default speakers, headphones or microphone with one key. Set a key to one device, or step through several. The key shows which device is in use. | Windows 10+ | [Releases](https://github.com/EmilB04/StreamDeck/releases) |
 
 ### Battery Monitor
 
@@ -17,10 +18,18 @@ A headset, mouse, keyboard, controller, phone, watch, earbuds and microphone,
 each on its own key. The code has no model list; the plugin finds them. See more screenshots in the
 [plugin README](BatteryMonitor/README.md#what-it-looks-like).
 
+### Audio Switch
+
+Two actions, **Output Device** and **Input Device**. A key either switches to
+one device or steps through the ones you tick, and can change the device for
+everything, for apps only, or for calls only. It needs nothing installed beside
+Stream Deck. See the [plugin README](AudioSwitch/README.md).
+
 ## Install a plugin
 
-1. Download the `.streamDeckPlugin` file from the
-   [latest release](https://github.com/EmilB04/StreamDeck/releases/latest).
+1. Download the plugin's `.streamDeckPlugin` file from the
+   [releases page](https://github.com/EmilB04/StreamDeck/releases). Each release
+   carries one plugin, named in its tag.
 2. Double-click it. The Stream Deck app installs it.
 3. Drag one of the plugin's actions onto a key.
 
@@ -42,12 +51,15 @@ npm install
 npm run pack        # -> dist/com.emilberglund.batterymonitor.streamDeckPlugin
 ```
 
+Audio Switch builds the same way from `AudioSwitch/`.
+
 `npm run pack` produces the same file the releases carry, so you can test a build
 before it ships. To develop against a live Stream Deck, run `npx @elgato/cli
 link` on the `.sdPlugin` folder and use `npm run watch`. The
 [plugin README](BatteryMonitor/README.md) covers the full loop.
 
-CI runs these on every push and pull request (`.github/workflows/ci.yml`):
+CI runs these for each plugin on every push and pull request
+(`.github/workflows/ci.yml`):
 
 ```sh
 npm run typecheck && npm run lint && npm run format:check && npm test
@@ -55,7 +67,8 @@ npm run typecheck && npm run lint && npm run format:check && npm test
 
 ## Releasing
 
-Push a tag of the form `<plugin>-v<version>`, e.g. `battery-monitor-v1.1.0`.
+Push a tag of the form `<plugin>-v<version>`, e.g. `battery-monitor-v1.1.0` or
+`audio-switch-v1.0.0`.
 `.github/workflows/release.yml` builds that plugin, packs it, and attaches the
 `.streamDeckPlugin` file to a GitHub release. Run the same workflow through
 `workflow_dispatch` to pack without releasing; the file stays as a build
@@ -64,7 +77,7 @@ artifact.
 ## Adding a plugin
 
 Give it a new top-level directory. Add a row to the table above, a tag prefix
-case in `release.yml`, and a job or matrix entry in `ci.yml`.
+and case in `release.yml`, and a matrix entry in `ci.yml`.
 
 ## Licence
 

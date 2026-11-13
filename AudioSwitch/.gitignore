@@ -1,0 +1,17 @@
+node_modules/
+com.emilberglund.audioswitch.sdPlugin/bin/
+com.emilberglund.audioswitch.sdPlugin/logs/
+# The SDK opens a log file as soon as it's imported, including under `npm test`.
+logs/
+*.streamDeckPlugin
+.DS_Store
+
+# Personal tool config; contains absolute paths from whoever ran it.
+.claude/settings.local.json
+com.emilberglund.audioswitch.sdPlugin/.claude/
+
+# Compiled test output.
+.test-build/
+
+# Packaged plugin, written by `npm run pack`.
+dist/

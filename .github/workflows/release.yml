@@ -11,12 +11,13 @@ on:
   push:
     tags:
       - "battery-monitor-v*"
+      - "audio-switch-v*"
   workflow_dispatch:
     inputs:
       plugin:
         description: Plugin directory to package
         type: choice
-        options: [BatteryMonitor]
+        options: [BatteryMonitor, AudioSwitch]
         default: BatteryMonitor
 
 jobs:
@@ -43,6 +44,7 @@ jobs:
           else
             case "$TAG" in
               battery-monitor-v*) dir=BatteryMonitor ;;
+              audio-switch-v*) dir=AudioSwitch ;;
               *) echo "::error::no plugin mapped to tag $TAG"; exit 1 ;;
             esac
           fi
@@ -56,9 +58,10 @@ jobs:
           cache: npm
           cache-dependency-path: ${{ steps.plugin.outputs.dir }}/package-lock.json
 
-      # node-hid's install script only verifies the prebuilt binary for the host
-      # platform; the npm tarball carries every platform's, including the Windows
-      # one that actually ships. So an ubuntu runner can build the Windows package.
+      # Battery Monitor: node-hid's install script only verifies the prebuilt
+      # binary for the host platform; the npm tarball carries every platform's,
+      # including the Windows one that actually ships. So an ubuntu runner can
+      # build the Windows package. Audio Switch has no native dependency at all.
       - run: npm ci --ignore-scripts
         working-directory: ${{ steps.plugin.outputs.dir }}
 

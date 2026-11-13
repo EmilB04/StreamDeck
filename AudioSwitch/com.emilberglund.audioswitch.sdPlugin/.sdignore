@@ -1,0 +1,9 @@
+# Keeps development leftovers out of the .streamDeckPlugin package.
+# gitignore syntax; see `streamdeck pack`.
+
+# Written by the plugin at runtime, on the user's own machine.
+logs/
+
+# Editor and tooling state that has no business shipping.
+.claude/
+*.map

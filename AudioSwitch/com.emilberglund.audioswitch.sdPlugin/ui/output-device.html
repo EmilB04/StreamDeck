@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8" />
+	<title>Output Device</title>
+	<!-- Vendored, not fetched: see "Third-party code" in the README. -->
+	<script src="sdpi-components.js"></script>
+	<link rel="stylesheet" href="inspector.css" />
+</head>
+<body>
+	<div class="status" id="status" data-state="idle">
+		<div class="status-name" id="status-name">Reading devices…</div>
+		<div class="status-state" id="status-state">Current output</div>
+	</div>
+
+	<div class="section">On press</div>
+
+	<sdpi-item label="Mode">
+		<sdpi-select setting="mode" default="set">
+			<option value="set">Switch to one device</option>
+			<option value="cycle">Step through devices</option>
+		</sdpi-select>
+	</sdpi-item>
+
+	<!--
+		Both pickers are filled by the "getDevices" datasource: the plugin answers
+		with what Windows reports, plus any chosen device that isn't connected right
+		now. Only the picker for the current mode is shown (see the script below).
+	-->
+	<sdpi-item label="Device" data-mode="set">
+		<sdpi-select
+			setting="device"
+			datasource="getDevices"
+			show-refresh
+			hot-reload
+			placeholder="Pick a device"
+			loading="Reading devices…"
+		></sdpi-select>
+	</sdpi-item>
+
+	<sdpi-item label="Devices" data-mode="cycle" hidden>
+		<sdpi-checkbox-list
+			setting="devices"
+			datasource="getDevices"
+			hot-reload
+			loading="Reading devices…"
+		></sdpi-checkbox-list>
+	</sdpi-item>
+
+	<span class="hint" data-mode="set">A press makes this the output device. The key lights up while it is.</span>
+	<span class="hint" data-mode="cycle" hidden>
+		A press moves to the next ticked device. Tick two for a simple toggle. A
+		device that isn't connected is skipped.
+	</span>
+
+	<sdpi-item label="Applies to">
+		<sdpi-select setting="role" default="both">
+			<option value="both">Everything</option>
+			<option value="default">Apps, games and music</option>
+			<option value="communications">Calls only</option>
+		</sdpi-select>
+	</sdpi-item>
+
+	<details class="more">
+	<summary>About "applies to"</summary>
+	<div>
+		<p>Windows keeps two defaults. Most programs use the <b>default device</b>. Call software such as Discord and Teams uses the <b>default communications device</b>, unless you picked a device inside the program itself.</p>
+		<p><b>Calls only</b> lets one key move a call to your headset while music stays on the speakers.</p>
+		<p>A program that is set to a specific device in its own settings ignores both.</p>
+	</div>
+	</details>
+
+	<div class="section">Key face</div>
+
+	<sdpi-item label="Name">
+		<sdpi-select setting="label" default="auto">
+			<option value="auto">Automatic</option>
+			<option value="description">What it is ("Speakers")</option>
+			<option value="adapter">What it's on ("Realtek Audio")</option>
+			<option value="none">No name</option>
+		</sdpi-select>
+	</sdpi-item>
+
+	<sdpi-item label="Own text" data-mode="set">
+		<sdpi-textfield setting="customLabel" placeholder="Use the device's name"></sdpi-textfield>
+	</sdpi-item>
+
+	<sdpi-item label="Icon">
+		<sdpi-select setting="icon" default="auto">
+			<option value="auto">Automatic</option>
+			<optgroup label="Output">
+				<option value="speaker">Speakers</option>
+				<option value="headphones">Headphones</option>
+				<option value="headset">Headset</option>
+				<option value="earbuds">Earbuds</option>
+				<option value="soundbar">Soundbar</option>
+				<option value="monitor">Monitor</option>
+				<option value="tv">TV</option>
+			</optgroup>
+			<optgroup label="Input">
+				<option value="microphone">Microphone</option>
+				<option value="webcam">Webcam</option>
+				<option value="line">Line / jack</option>
+			</optgroup>
+		</sdpi-select>
+	</sdpi-item>
+
+	<sdpi-item label="Show">
+		<sdpi-checkbox setting="showIcon" default="true" label="Icon"></sdpi-checkbox>
+	</sdpi-item>
+
+	<span class="hint">
+		Windows gives each device two names. Automatic picks the one that tells your
+		devices apart. The icon is guessed from the device's type and name; pick one
+		here if it guesses wrong.
+	</span>
+
+	<script>
+		const client = SDPIComponents.streamDeckClient;
+
+		const send = (payload) => {
+			if (typeof client.sendToPlugin === "function") client.sendToPlugin(payload);
+			else client.send("sendToPlugin", payload);
+		};
+
+		// Each mode has its own picker, hint and options; show the current mode's.
+		const showMode = (mode) => {
+			const current = mode === "cycle" ? "cycle" : "set";
+			for (const element of document.querySelectorAll("[data-mode]")) {
+				element.hidden = element.dataset.mode !== current;
+			}
+		};
+
+		const modeSelect = document.querySelector('sdpi-select[setting="mode"]');
+		modeSelect.addEventListener("valuechange", () => showMode(modeSelect.value));
+		client.didReceiveSettings?.subscribe?.((message) => showMode(message?.payload?.settings?.mode));
+		client
+			.getSettings()
+			.then((payload) => showMode(payload?.settings?.mode))
+			.catch(() => {});
+
+		// What Windows is using right now, so the panel opens with an answer.
+		const status = document.getElementById("status");
+		const statusName = document.getElementById("status-name");
+		const statusState = document.getElementById("status-state");
+
+		client.sendToPropertyInspector?.subscribe?.((message) => {
+			if (message?.payload?.event !== "getStatus") return;
+
+			const value = message.payload.status;
+			if (!value) {
+				status.dataset.state = "idle";
+				statusName.textContent = "Reading devices…";
+				statusState.textContent = "Current output";
+				return;
+			}
+
+			status.dataset.state = value.defaultName ? "ok" : "idle";
+			statusName.textContent = value.defaultName ?? "No output device";
+			statusState.textContent =
+				value.communicationsName === value.defaultName
+					? "Current output, calls included"
+					: `Current output. Calls use ${value.communicationsName ?? "no device"}`;
+		});
+
+		const askForStatus = () => send({ event: "getStatus" });
+		askForStatus();
+		setInterval(askForStatus, 2000);
+	</script>
+</body>
+</html>
